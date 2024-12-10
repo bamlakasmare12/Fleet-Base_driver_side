@@ -14,13 +14,17 @@ class Homepage extends StatelessWidget {
     location: 'Location 1',
   );
 
+  // DraggableScrollableController for controlling the bottom sheet
+  final DraggableScrollableController _sheetController =
+      DraggableScrollableController();
+
   @override
   Widget build(BuildContext context) {
     double screenwidth = MediaQuery.of(context).size.width;
     double screenheight = MediaQuery.of(context).size.height;
 
     return Scaffold(
-      extendBodyBehindAppBar: true,
+
       appBar: AppBar(
         flexibleSpace: ClipRRect(
           child: BackdropFilter(
@@ -69,70 +73,120 @@ class Homepage extends StatelessWidget {
         ],
       ),
       backgroundColor: Colors.white,
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          Container(
-            width: screenwidth,
-            height: screenheight * 0.9,
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey.withOpacity(0.5), width: 1),
-              borderRadius: BorderRadius.circular(10),
-              image: const DecorationImage(
-                image: AssetImage('Assets/logo/demo_map.png'),
-                fit: BoxFit.cover,
-              ),
-            ),
-          ),
-          DraggableScrollableSheet(
-            initialChildSize: 0.2,
-            minChildSize: 0.06,
-            maxChildSize: 0.4,
-            builder: (context, scrollController) => Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(20),
-                  topRight: Radius.circular(20),
+      body: GestureDetector(
+        onTap: () async {
+          // Get the current extent of the bottom sheet
+          final currentExtent = _sheetController.size;
+
+          // If at initial size, expand; if expanded, collapse
+          final targetExtent = currentExtent <= 0.14 ? 0.4 : 0.14;
+
+          await _sheetController.animateTo(
+            targetExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        },
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Container(
+              width: screenwidth,
+              height: screenheight * 0.9,
+              decoration: BoxDecoration(
+                border:
+                    Border.all(color: Colors.grey.withOpacity(0.5), width: 1),
+                borderRadius: BorderRadius.circular(10),
+                image: const DecorationImage(
+                  image: AssetImage('Assets/logo/demo_map.png'),
+                  fit: BoxFit.cover,
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 10,
-                    spreadRadius: 1,
-                    offset: Offset(0, -3),
-                  ),
-                ],
               ),
+            ),
+            Positioned.fill(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Padding(
-                    padding: EdgeInsets.all(1),
-                    child: Text(
-                      "Upcoming Tasks",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
+                  SizedBox(
+                      height:
+                          MediaQuery.of(context).padding.top + kToolbarHeight),
                   Expanded(
-                    
-                    child: ListView.builder(
-                      controller: scrollController,
-                      itemCount: 10,
-                      itemBuilder: (context, index) {
-                        return buildTask(task);
-                      },
+                    child: DraggableScrollableSheet(
+                      controller: _sheetController, // Attach the controller
+                      initialChildSize: 0.14,
+                      minChildSize: 0.1,
+                      maxChildSize: 0.4,
+                      builder: (context, scrollController) => Container(
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.only(
+                            topLeft: Radius.circular(20),
+                            topRight: Radius.circular(20),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black26,
+                              blurRadius: 10,
+                              spreadRadius: 1,
+                              offset: Offset(0, -3),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          children: [
+                            GestureDetector(
+                              onTap: () async {
+                                // When tapping the handle bar, toggle between expanded and collapsed states
+                                final currentExtent = _sheetController.size;
+                                final targetExtent =
+                                    currentExtent <= 0.14 ? 0.4 : 0.14;
+
+                                await _sheetController.animateTo(
+                                  targetExtent,
+                                  duration:
+                                      const Duration(milliseconds: 300),
+                                  curve: Curves.easeInOut,
+                                );
+                              },
+                              child: Container(
+                                width: 100,
+                                margin:
+                                    const EdgeInsets.symmetric(vertical: 10),
+                                height: 5,
+                                alignment: Alignment.center,
+                                decoration: const BoxDecoration(
+                                  color: Colors.black54,
+                                  borderRadius:
+                                      BorderRadius.all(Radius.circular(5)),
+                                ),
+                              ),
+                            ),
+                            const Text(
+                              "Upcoming Tasks",
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            Expanded(
+                              child: ListView.builder(
+                                controller: scrollController,
+                                itemCount: 10,
+                                itemBuilder: (context, index) {
+                                  return buildTask(task);
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
