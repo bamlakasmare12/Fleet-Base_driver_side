@@ -103,11 +103,27 @@ class Homepage extends StatelessWidget {
                 ),
               ),
             ),
-            Positioned.fill(
-              child: Column(
-                children: [
-                  SizedBox(
-                      height:
+Positioned(
+            top: 20, // Distance from the top
+            right: 20, // Distance from the right
+            child: ElevatedButton(
+              onPressed: () {
+                print('Button pressed!');
+              },
+              style: ElevatedButton.styleFrom(
+                shape: const CircleBorder(), // Example: circular button
+                padding: const EdgeInsets.all(16),
+                backgroundColor: Colors.white,
+                elevation: 10, // Button size
+              ),
+              child: const Icon(Icons.qr_code_scanner, color: Colors.black),
+            ),
+          ),
+          Positioned.fill(
+            child: Column(
+              children: [
+                SizedBox(
+                    height:
                           MediaQuery.of(context).padding.top + kToolbarHeight),
                   Expanded(
                     child: DraggableScrollableSheet(
