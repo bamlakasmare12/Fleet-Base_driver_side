@@ -1,10 +1,20 @@
+import '../Services/auth_gate.dart';
+
 import '../Views/Login.dart';
 import '../Views/Homepage.dart';
-import '../Views/Register.dart';
 import '../Views/Setting.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+void main() async {
 
-void main() {
+WidgetsFlutterBinding.ensureInitialized();
+  await Supabase.initialize(
+    anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh4b3BsdnFxYmtzYWZrem1peGd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzU1NTkzNDcsImV4cCI6MjA1MTEzNTM0N30.nOqH3iPPB6QDnDWrpZoigs0OGttZEUEHPWW10gZxIfs",
+    url:"https://hxoplvqqbksafkzmixgv.supabase.co",
+    // authOptions: FlutterAuthClientOptions(
+    //   autoRefreshToken: true,
+    // ),
+    );
   runApp(const MyApp());
 }   
 
@@ -15,27 +25,13 @@ const MyApp({super.key});
 Widget build(BuildContext context){
   return MaterialApp(
   debugShowCheckedModeBanner: false,
-  theme: ThemeData(
-    colorSchemeSeed: Colors.lightBlue,
-    brightness: Brightness.light,
-   // scaffoldBackgroundColor: Colors.black,
-    appBarTheme: const AppBarTheme(
-     // backgroundColor: Colors.black,
-    ),
-    elevatedButtonTheme: ElevatedButtonThemeData(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.lightBlue,
-        foregroundColor: Colors.white,
-      ),
-    )
-  ),
-        initialRoute: '/',
-        routes:{
-          '/':(context)=>loginScreen(),
-          '/Home':(context)=>Homepage(),
-          '/Register':(context)=>RegisterScreen(),
-          '/Settings':(context)=>SettingsPage(),
-        },
+  routes: {
+   // '/':(context)=>AuthGate(),
+    '/login':(context)=>loginScreen(),
+    '/home':(context)=>Homepage(),
+  },
+//  initialRoute: '/',
+home: AuthGate(),
    
  
   );

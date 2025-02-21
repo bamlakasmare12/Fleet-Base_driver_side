@@ -1,27 +1,28 @@
 import 'package:flutter/material.dart';
+import '../Model/Task.dart'; // Adjust the import as needed
 
 class HistoryPage extends StatelessWidget {
-  final List<Map<String, String>> history = [
-    {'date': '2024-01-01', 'event': 'Started using the app'},
-    {'date': '2024-03-15', 'event': 'Completed the first task'},
-    // Add more history events here
-  ];
+  // Using the dummy deliveryHistory data
+  final List<Task> history = '' as List<Task>;
+
+  HistoryPage({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('History'),
+        title: const Text('History'),
       ),
       body: ListView.builder(
         itemCount: history.length,
         itemBuilder: (context, index) {
+          final task = history[index];
           return Card(
-            margin: EdgeInsets.all(8.0),
+            margin: const EdgeInsets.all(8.0),
             child: ListTile(
-              title: Text(history[index]['event']!),
-              subtitle: Text(history[index]['date']!),
-              leading: Icon(Icons.history),
+              leading: const Icon(Icons.history),
+              title: Text(task.createdBy),
+              subtitle: Text('${task.startedAt} - ${task.deliveryInstructions}'),
             ),
           );
         },

@@ -1,10 +1,19 @@
-import 'package:fleetbase/Views/Setting.dart';
+import '../Views/Setting.dart';
 import 'package:flutter/material.dart';
 import '../Views/History.dart';
 import '../Views/List_view.dart';
 import '../views/Notification.dart';
+import '../Services/auth_service.dart';
+import '../Services/auth_gate.dart';
+import '../Services/delivery_manager.dart';
+import '../Model/Task.dart';
+
 class Menu extends StatelessWidget {
-  const Menu({super.key});
+  final Task? acceptedTask;
+  Menu({Key? key, this.acceptedTask}) : super(key: key);
+
+  final authservice = AuthService();
+  final authgate = AuthGate();
 
   @override
   Widget build(BuildContext context) {
@@ -29,38 +38,57 @@ class Menu extends StatelessWidget {
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) =>  SettingsPage()),
+                MaterialPageRoute(builder: (context) => SettingsPage()),
               );
             },
           ),
-         
           SettingsOption(
             icon: Icons.list_outlined,
             title: "Item Listings",
             onTap: () {
- Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => ItemListPage()),
-              );            },
+              if (acceptedTask != null) {
+                // Navigator.push(
+                //   context,
+                //   MaterialPageRoute(
+                //     builder: (context) =>
+                //         ListItemsPage(items: acceptedTask!.packages),
+                //   ),
+                // );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("No task has been accepted.")),
+                );
+              }
+            },
           ),
           SettingsOption(
             icon: Icons.history_rounded,
             title: "History",
             onTap: () {
- Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) =>  HistoryPage()),
-              );            },
+              if (acceptedTask == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('No active task selected')),
+                );
+                return;
+              }
+              // Navigator.push(
+              //   context,
+              //   MaterialPageRoute(
+              //       builder: (context) =>
+              //           ListItemsPage(items: acceptedTask!.clientSignature)),
+              // );
+            },
           ),
-          SettingsOption(
-            icon: Icons.notifications_rounded,
-            title: "Notifications",
-            onTap: () {
- Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => NotificationPage()),
-              );            },
-          ),
+//           SettingsOption(
+//             icon: Icons.notifications_rounded,
+//             title: "Notifications",
+//             onTap: () {
+//               Navigator.push(
+//                 context,
+//                 MaterialPageRoute(builder: (context) => NotificationPage()),
+//               );
+//             },
+//           ),
           const SizedBox(height: 24.0),
           const SectionHeader(title: "Support"),
           SettingsOption(
@@ -83,7 +111,7 @@ class Menu extends StatelessWidget {
               width: double.infinity,
               child: OutlinedButton(
                 onPressed: () {
-                  // Handle logout
+                  authservice.logout(context);
                 },
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16.0),

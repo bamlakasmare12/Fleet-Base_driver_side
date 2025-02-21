@@ -1,27 +1,24 @@
+// list_items_page.dart
 import 'package:flutter/material.dart';
 
-class ItemListPage extends StatelessWidget {
-  final List<String> items = [
-    'Item 1',
-    'Item 2',
-    'Item 3',
-    // Add more items here
-  ];
+class ListItemsPage extends StatelessWidget {
+  final List<String> items;
+
+  const ListItemsPage({Key? key, required this.items}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Item List'),
-      ),
+      appBar: AppBar(title: const Text('Delivery Items')),
       body: ListView.builder(
         itemCount: items.length,
         itemBuilder: (context, index) {
+          final item = items[index];
           return Card(
-            margin: EdgeInsets.all(8.0),
+            margin: const EdgeInsets.all(8.0),
             child: ListTile(
-              title: Text(items[index]),
-              leading: Icon(Icons.list),
+              leading: const Icon(Icons.list),
+              title: Text(item),
             ),
           );
         },
