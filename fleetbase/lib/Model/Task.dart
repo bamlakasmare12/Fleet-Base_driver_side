@@ -12,7 +12,7 @@ class Task {
   final double? destinationLatitude;
   final DateTime startedAt;
   final String clientSignature;
-
+  final String destinationAddress ;
   // Main constructor
   Task({
     required this.organizationId,
@@ -26,6 +26,7 @@ class Task {
     this.destinationLatitude,
     required this.startedAt,
     required this.clientSignature,
+    required this.destinationAddress,
   });
 
   // Convert Task to JSON
@@ -41,6 +42,7 @@ class Task {
         'destination_latitude': destinationLatitude,
         'started_at': startedAt.toIso8601String(),
         'client_signature': clientSignature,
+        'destination_name': destinationAddress,
       };
 
   // Parse JSON into Task
@@ -57,6 +59,8 @@ class Task {
       orderId: json['order_id'] ?? 0,
       destinationLongitude: parseDouble(json['destination_longitude']),
       deliveryInstructions: json['delivery_instructions'] ?? '',
+      destinationAddress: json['destination_name'] ?? '',
+
       deliveredAt: json['delivered_at'] != null
           ? DateTime.parse(json['delivered_at'])
           : DateTime.now(),

@@ -1,5 +1,5 @@
 import 'dart:ui';
-import 'package:fleetbase/Model/Task.dart';
+import '../Model/task_model.dart' as taskmodel;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -12,6 +12,7 @@ import '../Model/Task.dart' as taskFile;
 import '../Views/Menu.dart';
 import '../Services/cache_manager.dart';
 import '../Services/auth_service.dart';
+
 import '../Services/gpsupdate.dart'; // New service for sending GPS updates
 
 class Homepage extends StatefulWidget {
@@ -34,15 +35,17 @@ class _HomepageState extends State<Homepage> {
   final AuthService _authService = AuthService();
   final CacheManager cacheManager = CacheManager();
   final GpsUpdateService gpsUpdateService = GpsUpdateService();
-
+  //final TaskModel taskmodel = TaskModel();
   // Initially, use an empty list for tasks.
   List<taskFile.Task> tasks = <taskFile.Task>[];
+  List<taskmodel.TaskModel> tasked = <taskmodel.TaskModel>[];
+
   LatLng? _currentDestination = LatLng(0, 0);
   LatLng? _destination;
+  LatLng? _Warehousedestination;
   List<LatLng> _route = [];
   bool _showSearch = false;
   bool _isLoading = false;
-  String userId = '';
   String deliveryStatusId = '';
   taskFile.Task? acceptedTask;
   Timer? _deliveryTimer;
@@ -54,7 +57,6 @@ class _HomepageState extends State<Homepage> {
 
   Future<void> _initializeApp() async {
     // Get the user ID from the auth service.
-    userId = await _authService.getUserId();
 
     // Get the current location once and move the map.
     locationHandler.getCurrentLocation().then((location) {
@@ -86,23 +88,41 @@ class _HomepageState extends State<Homepage> {
     );
 
     // Load fetched tasks from API into the bottom sheet.
-    await loadDeliveries();
+    if (!_isLoading) {
+      await loadDeliveries();
+    }
     startDeliveryTimer();
   }
 
-  void startDeliveryTimer() async{
-    _deliveryTimer = Timer.periodic(Duration(seconds: 3), (timer) {
-      loadDeliveries();
-    });
-  }
+ void startDeliveryTimer() {
+  _deliveryTimer = Timer.periodic(const Duration(seconds: 15), (timer) async {
+    try {
+      final fetchedTasks = await taskHandler.fetchDeliveries();
+      final fetchedWarehouses = await taskHandler.fetchWarehouses();
+      setState(() {
+        tasks = fetchedTasks;
+        tasked = fetchedWarehouses.cast<taskmodel.TaskModel>();
+      });
+    } catch (e) {
+      print('Background refresh error: $e');
+    }
+  });
+}
 
   // This function fetches the deliveries and assigns them to the tasks list.
   Future<void> loadDeliveries() async {
+    setState(() => _isLoading = true);
     try {
-      tasks = (await taskHandler.fetchDeliveries(userId)).cast<Task>();
+      final fetchedTasks = await taskHandler.fetchDeliveries();
+      final fetchedWarehouses = await taskHandler.fetchWarehouses();
+      setState(() {
+        tasks = fetchedTasks;
+        tasked = fetchedWarehouses.cast<taskmodel.TaskModel>();
+        _isLoading = false;
+      });
     } catch (e) {
+      setState(() => _isLoading = false);
       print('Error fetching deliveries: $e');
-      // Optionally, you could use cached tasks if available.
     }
   }
 
@@ -136,9 +156,39 @@ class _HomepageState extends State<Homepage> {
     }
   }
 
+  Future<void> _WareHouseCoordinates(String location) async {
+    try {
+      LatLng? fetchedDestination =
+          await routeHandler.fetchCoordinates(location);
+      if (fetchedDestination != null) {
+        setState(() {
+          _destination = fetchedDestination;
+        });
+        if (_currentDestination != null && _destination != null) {
+          List<LatLng> newRoute = await routeHandler.getRoute(
+            current: _currentDestination!,
+            destination: _destination!,
+          );
+          setState(() {
+            _route = newRoute;
+          });
+          mapController.move(_destination!, 14);
+        }
+      } else {
+        _showError('Location not found. Please try another search.');
+      }
+    } catch (e) {
+      _showError(e.toString());
+    }
+  }
+
   void _showError(String message) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+      ),
+    );
   }
 
   void _toggleSearch() {
@@ -162,6 +212,19 @@ class _HomepageState extends State<Homepage> {
       },
       onError: _showError,
     );
+  }
+
+  bool checkTask() {
+    taskHandler.checkTask(
+      currentLocation: _currentDestination,
+      destination: _Warehousedestination,
+      onFinished: () {
+        setState(() {});
+        return true;
+      },
+      onError: _showError,
+    );
+    return false;
   }
 
   Future<void> routeToAcceptedTask() async {
@@ -423,12 +486,19 @@ class _HomepageState extends State<Homepage> {
                               textAlign: TextAlign.center,
                             ),
                             Expanded(
-                              child: ListView.builder(
-                                controller: scrollController,
-                                itemCount: tasks.length,
-                                itemBuilder: (context, index) =>
-                                    buildTask(tasks[index]),
-                              ),
+                              child: _isLoading
+                                  ? const Center(
+                                      child: CircularProgressIndicator())
+                                  : tasks.isEmpty
+                                      ? const Center(
+                                          child: Text("No tasks available"))
+                                      : ListView.builder(
+                                          controller: scrollController,
+                                          itemCount: tasks.length,
+                                          itemBuilder: (context, index) =>
+                                              buildTask(
+                                                  tasks[index], tasked[index]),
+                                        ),
                             ),
                           ],
                         ),
@@ -444,74 +514,89 @@ class _HomepageState extends State<Homepage> {
     );
   }
 
- Widget buildTask(taskFile.Task task) => ListTile(
-  title: Text(
-    task.createdBy,
-    style: const TextStyle(
-      fontSize: 18,
-      color: Colors.black,
-      fontWeight: FontWeight.bold,
-    ),
-  ),
-  subtitle: Text(
-    "\$${task.deliveryInstructions} at ${task.destinationLongitude} ${task.destinationLatitude}",
-  ),
-  trailing: ElevatedButton(
-    style: ElevatedButton.styleFrom(
-      // Highlight only if this task's ID matches the accepted one.
-      backgroundColor: (acceptedTask != null && acceptedTask!.id == task.id)
-          ? Colors.green
-          : null,
-    ),
-    onPressed: () async {
-      // If no task is currently accepted, accept this one.
-      if (acceptedTask == null) {
-        setState(() {
-          acceptedTask = taskHandler.acceptedTask=task;
-        });
-        await _fetchCoordinates(
-          "${task.destinationLongitude},${task.destinationLatitude}"
-        );
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Task '${task.id}' accepted."),
-            backgroundColor: Colors.green,
+  Widget buildTask(taskFile.Task task, taskmodel.TaskModel taskeds) => ListTile(
+        title: Text(
+          "Created by: ${task.createdBy}",
+          style: const TextStyle(
+            fontSize: 18,
+            color: Colors.black,
+            fontWeight: FontWeight.bold,
           ),
-        );
-      } else if (acceptedTask!.id == task.id) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Task '${task.id}' is already accepted."),
-            backgroundColor: Colors.orange,
+        ),
+        subtitle: Text(
+          "instruction: ${task.deliveryInstructions}\n location: ${task.destinationLongitude} ${task.destinationLatitude}\n WareHouse: ${taskeds.name}",
+          style: const TextStyle(
+            fontSize: 16,
+            color: Colors.black,
           ),
-        );
-      } else {
-        // Show a pop-up message if a different task is accepted.
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text("Task Already Accepted"),
-            content: const Text(
-              "You must finish your current task before accepting another."
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text("OK"),
-              ),
-            ],
+        ),
+        trailing: ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            // Highlight only if this task's ID matches the accepted one.
+            backgroundColor:
+                (acceptedTask != null && acceptedTask!.id == task.id)
+                    ? Colors.green
+                    : null,
           ),
-        );
-      }
-    },
-    child: Text(
-      (acceptedTask != null && acceptedTask!.id == task.id)
-          ? "Accepted"
-          : "Accept",
-    ),
-  ),
-  onTap: () {
-    _fetchCoordinates("${task.destinationLongitude},${task.destinationLatitude}");
-  },
-);
+          onPressed: () async {
+            // If no task is currently accepted, accept this one.
+            _Warehousedestination =
+                LatLng(taskeds.longitude, taskeds.latitude) as LatLng?;
+
+            if (acceptedTask == null && checkTask()) {
+              setState(() {
+                acceptedTask = taskHandler.acceptedTask = task;
+              });
+              await _fetchCoordinates(
+                  "${task.destinationLongitude},${task.destinationLatitude}");
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text("Task '${task.id}' accepted."),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            } else if (acceptedTask!.id == task.id) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text("Task '${task.id}' is already accepted."),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+            } else if (checkTask() == false) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                      "you need to be at the warehouse to accept the task ."),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+            } else {
+              // Show a pop-up message if a different task is accepted.
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text("Task Already Accepted"),
+                  content: const Text(
+                      "You must finish your current task before accepting another."),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text("OK"),
+                    ),
+                  ],
+                ),
+              );
+            }
+          },
+          child: Text(
+            (acceptedTask != null && acceptedTask!.id == task.id)
+                ? "Accepted"
+                : "Accept",
+          ),
+        ),
+        onTap: () {
+          // _fetchCoordinates("${taskeds.longitude},${taskeds.latitude}");
+          _fetchCoordinates(taskeds.name);
+        },
+      );
 }

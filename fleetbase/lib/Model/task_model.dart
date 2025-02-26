@@ -1,47 +1,53 @@
-class TaskModel {
-  final int organizationId;
-  final String createdBy;
-  final int orderId;
-  final double? destinationLongitude;
-  final String deliveryInstructions;
-  final DateTime deliveredAt;
-  final int id;
-  final int driverId;
-  final double? destinationLatitude;
-  final DateTime startedAt;
-  final String clientSignature;
+import 'package:flutter/foundation.dart';
 
-  const TaskModel({
-    required this.organizationId,
-    required this.createdBy,
-    required this.orderId,
-    this.destinationLongitude,
-    required this.deliveryInstructions,
-    required this.deliveredAt,
+class TaskModel {
+  final String userId;
+  final String name;
+  final double latitude;
+  final DateTime updatedAt;
+  final double longitude;
+  final int id;
+  final int organizationId;
+  final DateTime createdAt;
+
+  TaskModel({
+    required this.userId,
+    required this.name,
+    required this.latitude,
+    required this.updatedAt,
+    required this.longitude,
     required this.id,
-    required this.driverId,
-    this.destinationLatitude,
-    required this.startedAt,
-    required this.clientSignature,
+    required this.organizationId,
+    required this.createdAt,
   });
 
+  // Convert TaskModel to JSON
+  Map<String, dynamic> toJson() => {
+        'user_id': userId,
+        'name': name,
+        'latitude': latitude,
+        'updated_at': updatedAt.toIso8601String(),
+        'longitude': longitude,
+        'id': id,
+        'organization_id': organizationId,
+        'created_at': createdAt.toIso8601String(),
+      };
+
+  // Parse JSON into TaskModel
   factory TaskModel.fromJson(Map<String, dynamic> json) {
     return TaskModel(
-      organizationId: json['organization_id'] as int,
-      createdBy: json['created_by'] as String,
-      orderId: json['order_id'] as int,
-      destinationLongitude: json['destination_longitude'] != null 
-          ? (json['destination_longitude'] as num).toDouble() 
-          : null,
-      deliveryInstructions: json['delivery_instructions'] as String,
-      deliveredAt: DateTime.parse(json['delivered_at'] as String),
-      id: json['id'] as int,
-      driverId: json['driver_id'] as int,
-      destinationLatitude: json['destination_latitude'] != null 
-          ? (json['destination_latitude'] as num).toDouble() 
-          : null,
-      startedAt: DateTime.parse(json['started_at'] as String),
-      clientSignature: json['client_signature'] as String,
+      userId: json['user_id']?.toString() ?? '', // Handle UUID as String
+      name: json['name']?.toString() ?? '',
+      latitude: (json['latitude'] as num?)?.toDouble() ?? 0.0,
+      updatedAt: json['updated_at'] != null
+          ? DateTime.parse(json['updated_at'])
+          : DateTime.now(),
+      longitude: (json['longitude'] as num?)?.toDouble() ?? 0.0,
+      id: json['id'] ?? 0,
+      organizationId: json['organization_id'] ?? 0,
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'])
+          : DateTime.now(),
     );
   }
 }

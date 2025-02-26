@@ -5,7 +5,6 @@ import 'dart:convert';
 
 class DeliveryHandler {
   final AuthService authService = AuthService();
-  final Fetchdata fetchData = Fetchdata();
 
   final String baseUrl = 'https://supply-y47s.onrender.com';
 

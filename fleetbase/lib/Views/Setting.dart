@@ -177,29 +177,38 @@ class _SettingsPageState extends State<SettingsPage> {
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10)),
             ),
-            onPressed: () {
-              final currentPassword = controller.text;
-              if (controller.text.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content: Text('Please enter your current password'),
-                      backgroundColor: Colors.red),
-                );
-                return;
-              }
-              if (currentPassword.length < 6) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content:
-                          Text('Password must be at least 6 characters'),
-                      backgroundColor: Colors.red),
-                );
-                return;
-              }
+           onPressed: () async {
+  final currentPassword = controller.text;
+  if (currentPassword.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+          content: Text('Please enter your current password'),
+          backgroundColor: Colors.red),
+    );
+    return;
+  }
+  if (currentPassword.length < 6) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+          content: Text('Password must be at least 6 characters'),
+          backgroundColor: Colors.red),
+    );
+    return;
+  }
 
-              Navigator.pop(context);
-              _showNewPasswordDialog(context);
-            },
+  bool valid = await _authService.checkCurrentPassword(currentPassword);
+  if (valid) {
+    Navigator.pop(context);
+    _showNewPasswordDialog(context);
+  } else {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+          content: Text('Current password is incorrect'),
+          backgroundColor: Colors.red),
+    );
+  }
+},
+
             child: const Text('Continue',
                 style: TextStyle(color: Colors.white)),
           ),
@@ -265,45 +274,54 @@ class _SettingsPageState extends State<SettingsPage> {
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10)),
             ),
-            onPressed: () {
-              final newPassword = newController.text;
-              final confirmPassword = confirmController.text;
+           onPressed: () async {
+  final newPassword = newController.text;
+  final confirmPassword = confirmController.text;
 
-              if (newPassword.isEmpty || confirmPassword.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content: Text('Please fill in all fields'),
-                      backgroundColor: Colors.red),
-                );
-                return;
-              }
+  if (newPassword.isEmpty || confirmPassword.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+          content: Text('Please fill in all fields'),
+          backgroundColor: Colors.red),
+    );
+    return;
+  }
 
-              if (newPassword.length < 6) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content:
-                          Text('Password must be at least 6 characters'),
-                      backgroundColor: Colors.red),
-                );
-                return;
-              }
+  if (newPassword.length < 6) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+          content: Text('Password must be at least 6 characters'),
+          backgroundColor: Colors.red),
+    );
+    return;
+  }
 
-              if (newPassword != confirmPassword) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content: Text('Passwords do not match!'),
-                      backgroundColor: Colors.red),
-                );
-                return;
-              }
+  if (newPassword != confirmPassword) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+          content: Text('Passwords do not match!'),
+          backgroundColor: Colors.red),
+    );
+    return;
+  }
 
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                    content: Text('Password updated successfully!'),
-                    backgroundColor: Colors.green),
-              );
-              Navigator.pop(context);
-            },
+  bool? updated = await _authService.changePassword(newPassword);
+  if (updated != null && updated) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+          content: Text('Password updated successfully!'),
+          backgroundColor: Colors.green),
+    );
+    Navigator.pop(context);
+  } else {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+          content: Text('Failed to update password'),
+          backgroundColor: Colors.red),
+    );
+  }
+},
+
           ),
         ],
       ),

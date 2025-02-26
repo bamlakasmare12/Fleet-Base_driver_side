@@ -65,18 +65,13 @@ class Menu extends StatelessWidget {
             icon: Icons.history_rounded,
             title: "History",
             onTap: () {
-              if (acceptedTask == null) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('No active task selected')),
-                );
-                return;
-              }
-              // Navigator.push(
-              //   context,
-              //   MaterialPageRoute(
-              //       builder: (context) =>
-              //           ListItemsPage(items: acceptedTask!.clientSignature)),
-              // );
+              
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (context) =>
+                        HistoryPage()),
+              );
             },
           ),
 //           SettingsOption(
