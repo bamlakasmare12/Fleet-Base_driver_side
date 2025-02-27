@@ -10,14 +10,14 @@ class GpsUpdateService {
 
   Future<void> updateLocation(String deliveryStatusId) async {
     final location = await LocationHandler().getCurrentLocation();
-    final String deliveystatus = '6';
+    
     if (location == null) {
       print('Failed to get current location');
       return;
     }
 
     final gpsData = gpsModel(
-      delivery_status_id: int.parse(deliveystatus),
+      delivery_status_id: int.parse(deliveryStatusId),
       longitude: location.coordinates.longitude,
       latitude: location.coordinates.latitude,
       timestamp: location.timestamp,

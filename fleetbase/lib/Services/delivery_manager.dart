@@ -1,5 +1,4 @@
 import '../Services/auth_service.dart';
-import '../Services/Fetch_data.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
@@ -42,29 +41,10 @@ class DeliveryHandler {
     }
   }
 
-  Future<List<dynamic>> loadDeliveries() async {
-    //String driverId = await authService.getUserId();
-  String driverId='14';
-    final url =
-        Uri.parse('$baseUrl/delivery/deliveries_driver?driver_id=$driverId');
-
-    // Include your token in the headers
-    final token = await authService.getToken();
-    final response = await http.get(url, headers: {
-      'accept': 'application/json',
-      'Authorization': 'Bearer $token',
-    });
-
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body);
-    } else {
-      throw Exception('Failed to fetch data: ${response.statusCode}');
-    }
-  }
+  
 
  Future<String> getdeliveryid() async {
-  //String driverId = await authService.getUserId();
-  String driverId='1';
+  int? driverId = await authService.getDriverId();
   final url = Uri.parse('$baseUrl/delivery/deliveries_driver?driver_id=$driverId');
   final token = await authService.getToken();
   final response = await http.get(url, headers: {

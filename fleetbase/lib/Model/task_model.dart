@@ -10,6 +10,8 @@ class TaskModel {
   final int organizationId;
   final DateTime createdAt;
 
+  var orderId;
+
   TaskModel({
     required this.userId,
     required this.name,

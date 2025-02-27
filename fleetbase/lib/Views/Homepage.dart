@@ -39,16 +39,22 @@ class _HomepageState extends State<Homepage> {
   // Initially, use an empty list for tasks.
   List<taskFile.Task> tasks = <taskFile.Task>[];
   List<taskmodel.TaskModel> tasked = <taskmodel.TaskModel>[];
-
+  List<taskmodel.TaskModel> _selectedWarehouses = [];
   LatLng? _currentDestination = LatLng(0, 0);
   LatLng? _destination;
-  LatLng? _Warehousedestination;
+  List<LatLng> _selectedWarehouseCoordinates = [];
+  List<String> warehousenames = [];
   List<LatLng> _route = [];
   bool _showSearch = false;
   bool _isLoading = false;
   String deliveryStatusId = '';
   taskFile.Task? acceptedTask;
   Timer? _deliveryTimer;
+
+  static const double _markerSize = 40.0;
+  static const double _currentLocationSize = 40.0;
+  static const Color _taskColor = Colors.blue;
+  static const Color _warehouseColor = Colors.orange;
   @override
   void initState() {
     super.initState();
@@ -78,10 +84,10 @@ class _HomepageState extends State<Homepage> {
             _isLoading = false;
           });
           // Get the delivery ID asynchronously (instead of using userId)
-          String delId = await deliveryHandler.getdeliveryid();
+          int delId = (await deliveryHandler.getdeliveryid()) as int;
           // Update the backend with the new location.
-          await gpsUpdateService.updateLocation(delId);
-          mapController.move(newLocation, 16);
+          // await gpsUpdateService.updateLocation(delId);
+          // mapController.move(newLocation, 16);
         }();
       },
       mapController: mapController,
@@ -94,30 +100,26 @@ class _HomepageState extends State<Homepage> {
     startDeliveryTimer();
   }
 
- void startDeliveryTimer() {
-  _deliveryTimer = Timer.periodic(const Duration(seconds: 15), (timer) async {
-    try {
-      final fetchedTasks = await taskHandler.fetchDeliveries();
-      final fetchedWarehouses = await taskHandler.fetchWarehouses();
-      setState(() {
-        tasks = fetchedTasks;
-        tasked = fetchedWarehouses.cast<taskmodel.TaskModel>();
-      });
-    } catch (e) {
-      print('Background refresh error: $e');
-    }
-  });
-}
+  void startDeliveryTimer() {
+    _deliveryTimer = Timer.periodic(const Duration(seconds: 15), (timer) async {
+      try {
+        final fetchedTasks = await taskHandler.fetchDeliveries();
+        setState(() {
+          tasks = fetchedTasks;
+        });
+      } catch (e) {
+        print('Background refresh error: $e');
+      }
+    });
+  }
 
   // This function fetches the deliveries and assigns them to the tasks list.
   Future<void> loadDeliveries() async {
     setState(() => _isLoading = true);
     try {
       final fetchedTasks = await taskHandler.fetchDeliveries();
-      final fetchedWarehouses = await taskHandler.fetchWarehouses();
       setState(() {
         tasks = fetchedTasks;
-        tasked = fetchedWarehouses.cast<taskmodel.TaskModel>();
         _isLoading = false;
       });
     } catch (e) {
@@ -156,27 +158,35 @@ class _HomepageState extends State<Homepage> {
     }
   }
 
-  Future<void> _WareHouseCoordinates(String location) async {
+  // Modify _WareHouseCoordinates to simply move to the given location without drawing a route.
+
+  // This function fetches warehouses for a task, extracts their coordinates,
+// and stores both the full warehouse data and their LatLng coordinates.
+  Future<void> loadWarehouseCoordinatesFromTask(int taskId) async {
     try {
-      LatLng? fetchedDestination =
-          await routeHandler.fetchCoordinates(location);
-      if (fetchedDestination != null) {
-        setState(() {
-          _destination = fetchedDestination;
-        });
-        if (_currentDestination != null && _destination != null) {
-          List<LatLng> newRoute = await routeHandler.getRoute(
-            current: _currentDestination!,
-            destination: _destination!,
-          );
-          setState(() {
-            _route = newRoute;
-          });
-          mapController.move(_destination!, 14);
-        }
-      } else {
-        _showError('Location not found. Please try another search.');
+      // Fetch warehouses associated with the task.
+      final warehouses = await taskHandler.fetchWarehouses(taskId);
+
+      // Clear previous data (if needed).
+      _selectedWarehouses.clear();
+      _selectedWarehouseCoordinates.clear();
+
+      print("warehouses length: ${warehouses.length}");
+
+      // Loop through each warehouse.
+      for (int i = 0; i < warehouses.length; i++) {
+        // Create a LatLng instance using the warehouse's latitude and longitude.
+        LatLng coordinate =
+            LatLng(warehouses[i].latitude, warehouses[i].longitude);
+        print("warehouse coordinate: $coordinate");
+
+        // Add the full warehouse object and its coordinate to their respective lists.
+        _selectedWarehouses.add(warehouses[i]);
+        _selectedWarehouseCoordinates.add(coordinate);
       }
+
+      // Update the UI.
+      setState(() {});
     } catch (e) {
       _showError(e.toString());
     }
@@ -214,19 +224,6 @@ class _HomepageState extends State<Homepage> {
     );
   }
 
-  bool checkTask() {
-    taskHandler.checkTask(
-      currentLocation: _currentDestination,
-      destination: _Warehousedestination,
-      onFinished: () {
-        setState(() {});
-        return true;
-      },
-      onError: _showError,
-    );
-    return false;
-  }
-
   Future<void> routeToAcceptedTask() async {
     await taskHandler.routeToAcceptedTask(
       fetchCoordinatesCallback: _fetchCoordinates,
@@ -234,6 +231,79 @@ class _HomepageState extends State<Homepage> {
     );
   }
 
+  void _showDelayDialog(BuildContext context, taskFile.Task task) {
+    final reasonController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text("Delay Task"),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: reasonController,
+                    decoration: const InputDecoration(
+                      labelText: 'Delay Reason',
+                      border: OutlineInputBorder(),
+                    ),
+                    maxLines: 3,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter a reason';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    if (reasonController.text.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Please enter a delay reason'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
+
+                    try {
+                      await taskHandler.delayTask(
+                         task.id,
+                         reasonController.text, deliveryId: 0, status: '',
+                      );
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content:
+                              Text("Task delayed: ${reasonController.text}"),
+                          backgroundColor: Colors.blue,
+                        ),
+                      );
+                    } catch (e) {
+                      _showError("Failed to delay task: ${e.toString()}");
+                    }
+                  },
+                  child: const Text('Submit'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
   @override
   Widget build(BuildContext context) {
     double screenwidth = MediaQuery.of(context).size.width;
@@ -330,8 +400,8 @@ class _HomepageState extends State<Homepage> {
                 mapController: mapController,
                 options: MapOptions(
                   initialCenter: _currentDestination ?? const LatLng(0, 0),
-                  initialZoom: 5,
-                  minZoom: 0,
+                  initialZoom: 3,
+                  minZoom: 3,
                   maxZoom: 100,
                 ),
                 children: [
@@ -356,17 +426,60 @@ class _HomepageState extends State<Homepage> {
                     ]),
                   MarkerLayer(markers: [
                     Marker(
-                      point: _currentDestination!,
-                      width: 80,
-                      height: 80,
-                      child: IconButton(
-                        onPressed: () {},
-                        icon: const Icon(Icons.location_pin),
-                        color: Colors.red,
-                        iconSize: 40,
-                      ),
-                    ),
+                        point: _currentDestination!,
+                        width: 80,
+                        height: 80,
+                        child: Column(
+                          children: [
+                            Text(
+                              "My Location",
+                              style: TextStyle(
+                                color: Colors.black,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                backgroundColor: Colors.white.withOpacity(0.8),
+                              ),
+                            ),
+                            const Icon(
+                              Icons.location_pin,
+                              color: Colors.red,
+                              size: 40,
+                            ),
+                          ],
+                        )),
                   ]),
+                  // Added MarkerLayer for displaying multiple warehouse markers.
+                  MarkerLayer(
+                    markers: _selectedWarehouses
+                        .map((warehouse) => Marker(
+                              point: LatLng(
+                                  warehouse.latitude, warehouse.longitude),
+                              width: 80,
+                              height: 80,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    warehouse.name,
+                                    style: TextStyle(
+                                      color: Colors.black,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      backgroundColor:
+                                          Colors.white.withOpacity(0.8),
+                                    ),
+                                  ),
+                                  const Icon(
+                                    Icons.warehouse,
+                                    color: Colors.blue,
+                                    size: 40,
+                                  ),
+                                ],
+                              ),
+                            ))
+                        .toList(),
+                  ),
+
                   PolylineLayer(
                     polylines: [
                       Polyline(
@@ -494,10 +607,10 @@ class _HomepageState extends State<Homepage> {
                                           child: Text("No tasks available"))
                                       : ListView.builder(
                                           controller: scrollController,
+                                          // FIX: Use the smaller length to avoid out-of-range errors.
                                           itemCount: tasks.length,
                                           itemBuilder: (context, index) =>
-                                              buildTask(
-                                                  tasks[index], tasked[index]),
+                                              buildTask(tasks[index]),
                                         ),
                             ),
                           ],
@@ -514,41 +627,116 @@ class _HomepageState extends State<Homepage> {
     );
   }
 
-  Widget buildTask(taskFile.Task task, taskmodel.TaskModel taskeds) => ListTile(
+  Widget buildTask(taskFile.Task task) => ListTile(
         title: Text(
           "Created by: ${task.createdBy}",
           style: const TextStyle(
-            fontSize: 18,
-            color: Colors.black,
-            fontWeight: FontWeight.bold,
-          ),
+              fontSize: 18, color: Colors.black, fontWeight: FontWeight.bold),
         ),
         subtitle: Text(
-          "instruction: ${task.deliveryInstructions}\n location: ${task.destinationLongitude} ${task.destinationLatitude}\n WareHouse: ${taskeds.name}",
-          style: const TextStyle(
-            fontSize: 16,
-            color: Colors.black,
-          ),
+          "Instruction: ${task.deliveryInstructions}\nLocation: ${task.destinationLongitude}, ${task.destinationLatitude}",
+          style: const TextStyle(fontSize: 16, color: Colors.black),
         ),
-        trailing: ElevatedButton(
+        onTap: () async {
+          try {
+            final fetchedWarehouses =
+                await taskHandler.fetchWarehouses(task.id);
+
+            setState(() {
+              _selectedWarehouses = fetchedWarehouses;
+            });
+
+            if (_selectedWarehouses.isNotEmpty) {
+              WidgetsBinding.instance.addPostFrameCallback((_) async {
+                if (_currentDestination == null) return;
+
+                final warehousePoints = _selectedWarehouses
+                    .map((w) => LatLng(w.latitude, w.longitude))
+                    .toList();
+
+                // Combine with current location for better context
+                final allPoints = [...warehousePoints, _currentDestination!];
+
+                if (_selectedWarehouses.length == 1) {
+                  // Single warehouse: Set zoom level explicitly
+                  mapController.move(
+                    warehousePoints.first,
+                    14, // Optimal zoom level for single location
+                  );
+                } else {
+                  // Multiple warehouses: Fit to bounds
+                  final bounds = LatLngBounds.fromPoints(allPoints);
+                  mapController.fitCamera(
+                    CameraFit.bounds(
+                      bounds: bounds,
+                      padding: const EdgeInsets.all(100),
+                    ),
+                  );
+                }
+              });
+            }
+          } catch (e) {
+            print('Error handling warehouse tap: $e');
+          }
+        },
+        trailing:ConstrainedBox(
+        constraints:const BoxConstraints.tightFor(width: 200.0),
+        child:Row(
+              mainAxisSize: MainAxisSize.min,
+          children: [
+          ElevatedButton(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: (acceptedTask?.id == task.id)
+            ? Colors.orange
+            : Colors.grey, // Grey out if not accepted
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+      ),
+      onPressed: () {
+        if (acceptedTask==null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Please accept the task first"),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }else if (acceptedTask!.id != task.id) {
+  ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("only tasked accepted can be delayed."),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+        _showDelayDialog(context, task);
+      },
+      child: Text(
+        "Delay",
+        style: TextStyle(
+          fontSize: 14,
+          color: (acceptedTask?.id == task.id)
+              ? Colors.white
+              : Colors.black54,
+        ),
+      ),
+    ),
+    const SizedBox(width: 8),
+          
+           ElevatedButton(
           style: ElevatedButton.styleFrom(
-            // Highlight only if this task's ID matches the accepted one.
             backgroundColor:
                 (acceptedTask != null && acceptedTask!.id == task.id)
                     ? Colors.green
                     : null,
           ),
           onPressed: () async {
-            // If no task is currently accepted, accept this one.
-            _Warehousedestination =
-                LatLng(taskeds.longitude, taskeds.latitude) as LatLng?;
-
-            if (acceptedTask == null && checkTask()) {
+            if (acceptedTask == null) {
               setState(() {
                 acceptedTask = taskHandler.acceptedTask = task;
               });
               await _fetchCoordinates(
-                  "${task.destinationLongitude},${task.destinationLatitude}");
+                  "${task.destinationLatitude},${task.destinationLongitude}");
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text("Task '${task.id}' accepted."),
@@ -562,16 +750,7 @@ class _HomepageState extends State<Homepage> {
                   backgroundColor: Colors.orange,
                 ),
               );
-            } else if (checkTask() == false) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                      "you need to be at the warehouse to accept the task ."),
-                  backgroundColor: Colors.orange,
-                ),
-              );
             } else {
-              // Show a pop-up message if a different task is accepted.
               showDialog(
                 context: context,
                 builder: (context) => AlertDialog(
@@ -594,9 +773,10 @@ class _HomepageState extends State<Homepage> {
                 : "Accept",
           ),
         ),
-        onTap: () {
-          // _fetchCoordinates("${taskeds.longitude},${taskeds.latitude}");
-          _fetchCoordinates(taskeds.name);
-        },
-      );
+        ],
+      ),
+        ),
+  
+  );
+
 }
