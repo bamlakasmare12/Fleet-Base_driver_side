@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../Services/auth_service.dart'; // Assume this contains your authentication logic
@@ -65,7 +64,6 @@ class _SettingsPageState extends State<SettingsPage> {
 
           // App Settings Section
           _buildSectionHeader('App Settings'),
-          _buildNotificationSettings(),
           _buildLanguageSettings(),
           const SizedBox(height: 20),
 
@@ -328,22 +326,7 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _buildNotificationSettings() {
-    return Card(
-      color: Colors.white, // Set background color to white
-      elevation: 2,
-      child: SwitchListTile(
-        title: const Text('Enable Notifications'),
-        secondary: const Icon(Icons.notifications, color: Colors.black54),
-        value: _notificationsEnabled,
-        onChanged: (value) async {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setBool('notifications', value);
-          setState(() => _notificationsEnabled = value);
-        },
-      ),
-    );
-  }
+ 
 
   Widget _buildLanguageSettings() {
     return Card(
