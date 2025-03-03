@@ -2,7 +2,6 @@ import '../Views/Setting.dart';
 import 'package:flutter/material.dart';
 import '../Views/History.dart';
 import '../Views/List_view.dart';
-import '../views/Notification.dart';
 import '../Services/auth_service.dart';
 import '../Services/auth_gate.dart';
 import '../Services/delivery_manager.dart';
