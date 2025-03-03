@@ -7,14 +7,16 @@ import '../Services/auth_service.dart';
 import '../Services/auth_gate.dart';
 import '../Services/delivery_manager.dart';
 import '../Model/Task.dart';
+import '../model/orderList_model.dart';
+import '../Services/list_view_manager.dart';
 
 class Menu extends StatelessWidget {
   final Task? acceptedTask;
   Menu({Key? key, this.acceptedTask}) : super(key: key);
 
   final authservice = AuthService();
-  final authgate = AuthGate();
-
+  final ListViewManager listViewManager = ListViewManager();
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -42,22 +44,33 @@ class Menu extends StatelessWidget {
               );
             },
           ),
-          SettingsOption(
+         SettingsOption(
             icon: Icons.list_outlined,
             title: "Item Listings",
-            onTap: () {
-              if (acceptedTask != null) {
-                // Navigator.push(
-                //   context,
-                //   MaterialPageRoute(
-                //     builder: (context) =>
-                //         ListItemsPage(items: acceptedTask!.packages),
-                //   ),
-                // );
-              } else {
+            onTap: () async {
+              if (acceptedTask?.orderId == null) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("No task has been accepted.")),
-                );
+                  const SnackBar(content: Text("No active task found")));
+                return;
+              }
+
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (context) => const Center(child: CircularProgressIndicator()),
+              );
+
+              try {
+                final order = await listViewManager.getDeliveryDetails(acceptedTask!.orderId!);
+                if (!context.mounted) return;
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(
+                  builder: (context) => ListItemsPage(orderDelivery: order)));
+              } catch (e) {
+                if (!context.mounted) return;
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text("Error: ${e.toString()}")));
               }
             },
           ),
@@ -65,25 +78,12 @@ class Menu extends StatelessWidget {
             icon: Icons.history_rounded,
             title: "History",
             onTap: () {
-              
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                    builder: (context) =>
-                        HistoryPage()),
+                MaterialPageRoute(builder: (context) => HistoryPage()),
               );
             },
           ),
-//           SettingsOption(
-//             icon: Icons.notifications_rounded,
-//             title: "Notifications",
-//             onTap: () {
-//               Navigator.push(
-//                 context,
-//                 MaterialPageRoute(builder: (context) => NotificationPage()),
-//               );
-//             },
-//           ),
           const SizedBox(height: 24.0),
           const SectionHeader(title: "Support"),
           SettingsOption(
@@ -105,9 +105,7 @@ class Menu extends StatelessWidget {
             child: SizedBox(
               width: double.infinity,
               child: OutlinedButton(
-                onPressed: () {
-                  authservice.logout(context);
-                },
+                onPressed: () => authservice.logout(context),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16.0),
                   side: const BorderSide(color: Colors.black, width: 1.5),
@@ -130,7 +128,18 @@ class Menu extends StatelessWidget {
       ),
     );
   }
+
+  void _showErrorMessage(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
 }
+
+// Rest of your existing SectionHeader and SettingsOption classes remain the same
 
 class SectionHeader extends StatelessWidget {
   final String title;

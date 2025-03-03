@@ -213,22 +213,47 @@ class TaskHandler {
     }
   }
 
-  Future<void> delayTask(int id, String text, {required int deliveryId, required String status}) async {
-    final AuthService authService = AuthService();
+  Future<void> delayTask(int deliveryId, String notes) async {
     final String baseUrl = 'https://supply-y47s.onrender.com';
-    final url = Uri.parse('$baseUrl/delivery/update_delivery_status');
-    final token = await authService.getToken();
-    final response = await http.post(url, headers: {
-      'accept': 'application/json',
-      'Authorization': 'Bearer $token',
-    }, body: {
-      'delivery_id': deliveryId,
-      'status': status,
-      'timestamp': DateTime.now().toIso8601String(),
-    });
+    final Uri url = Uri.parse(
+        '$baseUrl/delivery/delivery_delay?delivery_id=$deliveryId&note=$notes');
+    final token = await _authService.getToken();
+
+    final response = await http.post(
+      url,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'accept': 'application/json', // Use application/json
+      },
+    );
+
     if (response.statusCode != 200) {
+      print('Response body: ${response.body}');
       throw Exception(
           'Failed to update delivery status: ${response.statusCode}');
     }
   }
+
+  Future<void> updateDeliveryStatus(int deliveryId) async {
+    final String baseUrl = 'https://supply-y47s.onrender.com';
+    final url = Uri.parse(
+        '$baseUrl/delivery/delivery_picked_up?delivery_id=$deliveryId');
+    final token = await _authService.getToken();
+    print("the task id int update: $deliveryId");
+    final response = await http.post(
+      url,
+      headers: {
+        'accept': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+    if (response.statusCode != 200) {
+      throw Exception(
+          'Failed to update delivery status: ${response.statusCode}');
+    } else if (response.statusCode == 200) {
+      print('Delivery status updated successfully');
+    }
+  }
+
+  
 }

@@ -100,8 +100,10 @@ class _HomepageState extends State<Homepage> {
     startDeliveryTimer();
   }
 
+  
+
   void startDeliveryTimer() {
-    _deliveryTimer = Timer.periodic(const Duration(seconds: 15), (timer) async {
+    _deliveryTimer = Timer.periodic(const Duration(seconds: 10), (timer) async {
       try {
         final fetchedTasks = await taskHandler.fetchDeliveries();
         setState(() {
@@ -115,18 +117,31 @@ class _HomepageState extends State<Homepage> {
 
   // This function fetches the deliveries and assigns them to the tasks list.
   Future<void> loadDeliveries() async {
-    setState(() => _isLoading = true);
-    try {
-      final fetchedTasks = await taskHandler.fetchDeliveries();
-      setState(() {
-        tasks = fetchedTasks;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() => _isLoading = false);
-      print('Error fetching deliveries: $e');
+  setState(() => _isLoading = true);
+  try {
+    final fetchedTasks = await taskHandler.fetchDeliveries();
+    setState(() {
+      tasks = fetchedTasks;
+      _isLoading = false;
+    });
+
+    // Check the status of each task and update _destination and acceptedTask if in transit
+    for (var task in fetchedTasks) {
+      if (task.status == "In Transit") { // Assuming 2 represents 'in transit'
+        setState(() async {
+          _destination = LatLng(task.destinationLatitude ?? 0.0, task.destinationLongitude ?? 0.0);
+          acceptedTask = task;
+          _route= await routeHandler.getRoute(current: _currentDestination!, destination: _destination!);
+          
+        });
+        break; // Exit the loop once we find a task in transit
+      }
     }
+  } catch (e) {
+    setState(() => _isLoading = false);
+    print('Error fetching deliveries: $e');
   }
+}
 
   String? displayUserName() {
     return _authService.getUserName();
@@ -279,9 +294,10 @@ class _HomepageState extends State<Homepage> {
                     }
 
                     try {
+                      final notes = reasonController.text.trim();
                       await taskHandler.delayTask(
-                         task.id,
-                         reasonController.text, deliveryId: 0, status: '',
+                        task.id,
+                        notes,
                       );
                       Navigator.pop(context);
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -291,6 +307,11 @@ class _HomepageState extends State<Homepage> {
                           backgroundColor: Colors.blue,
                         ),
                       );
+                      setState(() {
+                        acceptedTask = null;
+                        _destination = null;
+                        _route = [];
+                      });
                     } catch (e) {
                       _showError("Failed to delay task: ${e.toString()}");
                     }
@@ -304,6 +325,7 @@ class _HomepageState extends State<Homepage> {
       },
     );
   }
+
   @override
   Widget build(BuildContext context) {
     double screenwidth = MediaQuery.of(context).size.width;
@@ -364,14 +386,12 @@ class _HomepageState extends State<Homepage> {
           ),
           IconButton(
             icon: const Icon(Icons.menu),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => Menu(acceptedTask: acceptedTask),
-                ),
-              );
-            },
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => Menu(acceptedTask: acceptedTask),
+              ),
+            ),
           ),
         ],
       ),
@@ -512,7 +532,17 @@ class _HomepageState extends State<Homepage> {
               top: 70,
               right: 20,
               child: ElevatedButton(
-                onPressed: routeToAcceptedTask,
+                onPressed: () {
+                  if(acceptedTask!=null)
+                  routeToAcceptedTask();
+                  else
+                   ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("no Delivery is in route"),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                },
                 style: ElevatedButton.styleFrom(
                   shape: const CircleBorder(),
                   padding: const EdgeInsets.all(16),
@@ -629,15 +659,16 @@ class _HomepageState extends State<Homepage> {
 
   Widget buildTask(taskFile.Task task) => ListTile(
         title: Text(
-          "Created by: ${task.createdBy}",
+          "Order id: ${task.orderId}",
           style: const TextStyle(
               fontSize: 18, color: Colors.black, fontWeight: FontWeight.bold),
         ),
         subtitle: Text(
-          "Instruction: ${task.deliveryInstructions}\nLocation: ${task.destinationLongitude}, ${task.destinationLatitude}",
+          "Instruction: ${task.deliveryInstructions}\nStatus: ${task.status}\nLocation: ${task.destinationLongitude}, ${task.destinationLatitude}",
           style: const TextStyle(fontSize: 16, color: Colors.black),
         ),
         onTap: () async {
+          print("task id: ${task.orderId} delivery id ${task.id} on tap");
           try {
             final fetchedWarehouses =
                 await taskHandler.fetchWarehouses(task.id);
@@ -679,104 +710,103 @@ class _HomepageState extends State<Homepage> {
             print('Error handling warehouse tap: $e');
           }
         },
-        trailing:ConstrainedBox(
-        constraints:const BoxConstraints.tightFor(width: 200.0),
-        child:Row(
-              mainAxisSize: MainAxisSize.min,
-          children: [
-          ElevatedButton(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: (acceptedTask?.id == task.id)
-            ? Colors.orange
-            : Colors.grey, // Grey out if not accepted
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-      ),
-      onPressed: () {
-        if (acceptedTask==null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Please accept the task first"),
-              backgroundColor: Colors.red,
-            ),
-          );
-          return;
-        }else if (acceptedTask!.id != task.id) {
-  ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("only tasked accepted can be delayed."),
-              backgroundColor: Colors.red,
-            ),
-          );
-          return;
-        }
-        _showDelayDialog(context, task);
-      },
-      child: Text(
-        "Delay",
-        style: TextStyle(
-          fontSize: 14,
-          color: (acceptedTask?.id == task.id)
-              ? Colors.white
-              : Colors.black54,
-        ),
-      ),
-    ),
-    const SizedBox(width: 8),
-          
-           ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor:
-                (acceptedTask != null && acceptedTask!.id == task.id)
-                    ? Colors.green
-                    : null,
+        trailing: ConstrainedBox(
+          constraints: const BoxConstraints.tightFor(width: 200.0),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: (acceptedTask?.id == task.id)
+                      ? Colors.orange
+                      : Colors.grey, // Grey out if not accepted
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                ),
+                onPressed: () {
+                  if (acceptedTask == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Please accept the task first"),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                    return;
+                  } else if (acceptedTask!.id != task.id) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("only tasked accepted can be delayed."),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                    return;
+                  }
+                  _showDelayDialog(context, task);
+                },
+                child: Text(
+                  "Delay",
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: (acceptedTask?.id == task.id)
+                        ? Colors.white
+                        : Colors.black54,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor:
+                      (acceptedTask != null && acceptedTask!.id == task.id)
+                          ? Colors.green
+                          : null,
+                ),
+                onPressed: () async {
+                  if (acceptedTask == null) {
+                    setState(() {
+                      acceptedTask = taskHandler.acceptedTask = task;
+                      taskHandler.updateDeliveryStatus(task.id);
+                    });
+                    await _fetchCoordinates(
+                        "${task.destinationLatitude},${task.destinationLongitude}");
+                    print("task id: ${task.orderId} delivery id ${task.id}");
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text("Task '${task.id}' accepted."),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  } else if (acceptedTask!.id == task.id) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text("Task '${task.id}' is already accepted."),
+                        backgroundColor: Colors.orange,
+                      ),
+                    );
+                  } else {
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text("Task Already Accepted"),
+                        content: const Text(
+                            "You must finish your current task before accepting another."),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text("OK"),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                },
+                child: Text(
+                  (acceptedTask != null && acceptedTask!.id == task.id)
+                      ? "Accepted"
+                      : "Accept",
+                ),
+              ),
+            ],
           ),
-          onPressed: () async {
-            if (acceptedTask == null) {
-              setState(() {
-                acceptedTask = taskHandler.acceptedTask = task;
-              });
-              await _fetchCoordinates(
-                  "${task.destinationLatitude},${task.destinationLongitude}");
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text("Task '${task.id}' accepted."),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            } else if (acceptedTask!.id == task.id) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text("Task '${task.id}' is already accepted."),
-                  backgroundColor: Colors.orange,
-                ),
-              );
-            } else {
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text("Task Already Accepted"),
-                  content: const Text(
-                      "You must finish your current task before accepting another."),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text("OK"),
-                    ),
-                  ],
-                ),
-              );
-            }
-          },
-          child: Text(
-            (acceptedTask != null && acceptedTask!.id == task.id)
-                ? "Accepted"
-                : "Accept",
-          ),
         ),
-        ],
-      ),
-        ),
-  
-  );
-
+      );
 }
