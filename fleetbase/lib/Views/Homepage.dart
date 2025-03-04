@@ -61,6 +61,9 @@ class _HomepageState extends State<Homepage> {
     _initializeApp();
   }
 
+  /// Initializes the app by getting the user ID, getting the current location once, and starting continuous location updates.
+  /// It also loads the fetched tasks from the API into the bottom sheet and starts the delivery timer.
+
   Future<void> _initializeApp() async {
     // Get the user ID from the auth service.
 
@@ -74,7 +77,7 @@ class _HomepageState extends State<Homepage> {
       }
     });
 
-    //Initialize continuous location updates.
+    // Initialize continuous location updates.
     locationHandler.initializeLocation(
       onLocationUpdate: (newLocation) {
         // Wrap the callback body in an async closure.
@@ -84,14 +87,33 @@ class _HomepageState extends State<Homepage> {
             _isLoading = false;
           });
           // Get the delivery ID asynchronously (instead of using userId)
-          int delId = (await deliveryHandler.getdeliveryid()) as int;
-          // Update the backend with the new location.
-          // await gpsUpdateService.updateLocation(delId);
-          // mapController.move(newLocation, 16);
+          if (acceptedTask != null) {
+            int delId = acceptedTask!.id;
+            // Update the backend with the new location.
+            await gpsUpdateService.updateLocation(delId);
+            // mapController.move(newLocation, 16);
+          }
         }();
       },
       mapController: mapController,
     );
+
+    // Start a timer to update the current location every 3 seconds.
+    Timer.periodic(const Duration(seconds: 3), (timer) async {
+      final location = await locationHandler.getCurrentLocation();
+      if (location != null) {
+        setState(() {
+          _currentDestination = location.coordinates;
+        });
+        mapController.move(location.coordinates, 16);
+
+        // Update the backend with the new location if there is an active task.
+        if (acceptedTask != null) {
+          int delId = acceptedTask!.id;
+          await gpsUpdateService.updateLocation(delId);
+        }
+      }
+    });
 
     // Load fetched tasks from API into the bottom sheet.
     if (!_isLoading) {
@@ -100,8 +122,6 @@ class _HomepageState extends State<Homepage> {
     startDeliveryTimer();
   }
 
-  
-
   void startDeliveryTimer() {
     _deliveryTimer = Timer.periodic(const Duration(seconds: 10), (timer) async {
       try {
@@ -109,6 +129,32 @@ class _HomepageState extends State<Homepage> {
         setState(() {
           tasks = fetchedTasks;
         });
+
+        // Check the status of each task and update _destination and acceptedTask if in transit
+        bool foundInTransit = false;
+        for (var task in fetchedTasks) {
+          if (task.status == "In Transit") {
+            // Assuming "In Transit" represents 'in transit'
+            setState(() async {
+              _destination = LatLng(task.destinationLatitude ?? 0.0,
+                  task.destinationLongitude ?? 0.0);
+              acceptedTask = task;
+              _route = await routeHandler.getRoute(
+                  current: _currentDestination!, destination: _destination!);
+            });
+            foundInTransit = true;
+            break; // Exit the loop once we find a task in transit
+          }
+        }
+
+        // If no task is in transit, clear the acceptedTask and route
+        if (!foundInTransit) {
+          setState(() {
+            acceptedTask = null;
+            _destination = null;
+            _route = [];
+          });
+        }
       } catch (e) {
         print('Background refresh error: $e');
       }
@@ -117,31 +163,33 @@ class _HomepageState extends State<Homepage> {
 
   // This function fetches the deliveries and assigns them to the tasks list.
   Future<void> loadDeliveries() async {
-  setState(() => _isLoading = true);
-  try {
-    final fetchedTasks = await taskHandler.fetchDeliveries();
-    setState(() {
-      tasks = fetchedTasks;
-      _isLoading = false;
-    });
+    setState(() => _isLoading = true);
+    try {
+      final fetchedTasks = await taskHandler.fetchDeliveries();
+      setState(() {
+        tasks = fetchedTasks;
+        _isLoading = false;
+      });
 
-    // Check the status of each task and update _destination and acceptedTask if in transit
-    for (var task in fetchedTasks) {
-      if (task.status == "In Transit") { // Assuming 2 represents 'in transit'
-        setState(() async {
-          _destination = LatLng(task.destinationLatitude ?? 0.0, task.destinationLongitude ?? 0.0);
-          acceptedTask = task;
-          _route= await routeHandler.getRoute(current: _currentDestination!, destination: _destination!);
-          
-        });
-        break; // Exit the loop once we find a task in transit
+      // Check the status of each task and update _destination and acceptedTask if in transit
+      for (var task in fetchedTasks) {
+        if (task.status == "In Transit") {
+          // Assuming 2 represents 'in transit'
+          setState(() async {
+            _destination = LatLng(task.destinationLatitude ?? 0.0,
+                task.destinationLongitude ?? 0.0);
+            acceptedTask = task;
+            _route = await routeHandler.getRoute(
+                current: _currentDestination!, destination: _destination!);
+          });
+          break; // Exit the loop once we find a task in transit
+        }
       }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      print('Error fetching deliveries: $e');
     }
-  } catch (e) {
-    setState(() => _isLoading = false);
-    print('Error fetching deliveries: $e');
   }
-}
 
   String? displayUserName() {
     return _authService.getUserName();
@@ -529,19 +577,20 @@ class _HomepageState extends State<Homepage> {
               ),
             ),
             Positioned(
-              top: 70,
+              top: 80,
               right: 20,
               child: ElevatedButton(
                 onPressed: () {
-                  if(acceptedTask!=null)
-                  routeToAcceptedTask();
-                  else
-                   ScaffoldMessenger.of(context).showSnackBar(
+                  if (acceptedTask != null)
+                    routeToAcceptedTask();
+                  else {
+                    ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text("no Delivery is in route"),
                         backgroundColor: Colors.red,
                       ),
                     );
+                  }
                 },
                 style: ElevatedButton.styleFrom(
                   shape: const CircleBorder(),
@@ -553,7 +602,7 @@ class _HomepageState extends State<Homepage> {
               ),
             ),
             Positioned(
-              top: 130,
+              top: 140,
               right: 20,
               child: ElevatedButton(
                 onPressed: finishTask,

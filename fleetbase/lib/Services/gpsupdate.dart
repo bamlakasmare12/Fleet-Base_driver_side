@@ -8,7 +8,7 @@ class GpsUpdateService {
   final String _url = 'https://supply-y47s.onrender.com/delivery/add_gps';
   final AuthService _authService = AuthService();
 
-  Future<void> updateLocation(String deliveryStatusId) async {
+  Future<void> updateLocation(int deliveryStatusId) async {
     final location = await LocationHandler().getCurrentLocation();
     
     if (location == null) {
@@ -17,7 +17,7 @@ class GpsUpdateService {
     }
 
     final gpsData = gpsModel(
-      delivery_status_id: int.parse(deliveryStatusId),
+      delivery_status_id: deliveryStatusId,
       longitude: location.coordinates.longitude,
       latitude: location.coordinates.latitude,
       timestamp: location.timestamp,
