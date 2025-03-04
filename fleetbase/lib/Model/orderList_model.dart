@@ -64,7 +64,7 @@ class OrderDetails {
 }
 
 class OrderItem {
-  final double price;
+  final int price;
   final int id;
   final int productId;
   final int quantity;
@@ -80,7 +80,7 @@ class OrderItem {
 
   factory OrderItem.fromJson(Map<String, dynamic> json) {
     return OrderItem(
-      price: (json['price'] as num).toDouble(),
+      price: json['price'] as int,
       id: json['id'] as int,
       productId: json['product_id'] as int,
       quantity: json['quantity'] as int,

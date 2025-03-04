@@ -91,7 +91,7 @@ class _HomepageState extends State<Homepage> {
             int delId = acceptedTask!.id;
             // Update the backend with the new location.
             await gpsUpdateService.updateLocation(delId);
-            // mapController.move(newLocation, 16);
+             mapController.move(newLocation, 16);
           }
         }();
       },

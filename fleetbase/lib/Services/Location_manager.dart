@@ -21,11 +21,11 @@ class LocationHandler {
       }
 
       // Check/request location permissions
-      // PermissionStatus permission = await locationService.hasPermission();
-      // if (permission == PermissionStatus.denied) {
-      //   permission = await locationService.requestPermission();
-      //   if (permission != PermissionStatus.granted) return false;
-      // }
+      PermissionStatus permission = await locationService.hasPermission();
+      if (permission == PermissionStatus.denied) {
+        permission = await locationService.requestPermission();
+        if (permission != PermissionStatus.granted) return false;
+      }
        return true;
     } catch (e) {
       print('Permission error: $e');
@@ -33,24 +33,22 @@ class LocationHandler {
     }
   }
 
-  Future<LocationResult?> getCurrentLocation() async {
+  Future<LocationResult?> getCurrentLocation({int retries = 3}) async {
     try {
-      final hasPermission = await checkAndRequestPermission();
-      if (!hasPermission) return null;
-
-      final locationData = await locationService.getLocation();
-      if (locationData.latitude == null || locationData.longitude == null) {
+      LocationData locationData = await locationService.getLocation();
+      if (locationData.latitude != null && locationData.longitude != null) {
+        return LocationResult(
+          LatLng(locationData.latitude!, locationData.longitude!),
+          DateTime.now(),
+        );
+      } else if (retries > 0) {
+        await Future.delayed(const Duration(seconds: 1));
+        return getCurrentLocation(retries: retries - 1);
+      } else {
         return null;
       }
-
-      return LocationResult(
-        LatLng(locationData.latitude!, locationData.longitude!),
-        locationData.time != null 
-            ? DateTime.fromMillisecondsSinceEpoch(locationData.time! as int)
-            : DateTime.now(),
-      );
     } catch (e) {
-      print('Error getting location: $e');
+      print('Error getting current location: $e');
       return null;
     }
   }
