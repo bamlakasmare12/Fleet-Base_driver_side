@@ -1,7 +1,7 @@
 class OrderDelivery {
   final OrderDetails orderDetails;
   final List<OrderItem> orderItems;
-  final double total;
+  final int total;
   final ClientDetails clientDetails;
   final List<ProductMap> productMap;
 
@@ -19,7 +19,7 @@ class OrderDelivery {
       orderItems: (json['order_items'] as List)
           .map((item) => OrderItem.fromJson(item))
           .toList(),
-      total: (json['total'] as num).toDouble(),
+      total: json['total'] as int,
       clientDetails: ClientDetails.fromJson(json['client_details']),
       productMap: (json['product_map'] as List)
           .map((item) => ProductMap.fromJson(item))
@@ -127,7 +127,7 @@ class ProductMap {
   final int warehouseId;
   final String warehouseName;
   final int quantity;
-  final double price;
+  final int price;
 
   ProductMap({
     required this.productId,
@@ -145,7 +145,7 @@ class ProductMap {
       warehouseId: json['warehouse_id'] as int,
       warehouseName: json['warehouse_name'] as String,
       quantity: json['quantity'] as int,
-      price: (json['price'] as num).toDouble(),
+      price: json['price'] as int,
     );
   }
 }

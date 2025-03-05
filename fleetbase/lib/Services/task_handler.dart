@@ -6,14 +6,13 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../Model/task_model.dart';
 import '../services/delivery_manager.dart';
-
 class TaskHandler {
   Task? acceptedTask;
   AuthService _authService = AuthService();
   deliveryModel? delivery;
   DeliveryHandler? deliveryManager = DeliveryHandler();
 
-  Future<void> acceptTask({
+ Future<void> acceptTask({
     required Task task,
     required LatLng? currentDestination,
     required Future<void> Function(String) fetchCoordinates,
@@ -22,42 +21,83 @@ class TaskHandler {
     required Function(Task?) updateAcceptedTask,
   }) async {
     if (currentDestination == null) {
-      onError("Cannot accept this task yet. Waiting for current location...");
+      onError("Cannot accept task - location unavailable");
       return;
     }
+    
     if (acceptedTask == null) {
-      acceptedTask = task;
-      updateAcceptedTask(acceptedTask);
-      await fetchCoordinates((task.destinationLatitude.toString() +
-          ',' +
-          task.destinationLongitude.toString()));
-      onSuccess("Task '${task.id}' accepted.");
-    } else if (acceptedTask!.id == task.id) {
-      onError("Task '${task.id}' is already accepted.");
+      try {
+        // Update backend status first
+        await updateDeliveryStatus(task.id);
+        
+        acceptedTask = task;
+        updateAcceptedTask(acceptedTask);
+        
+        // Directly set coordinates instead of geocoding
+        await fetchCoordinates(
+          "${task.destinationLatitude},${task.destinationLongitude}"
+        );
+        
+        onSuccess("Task ${task.id} accepted");
+      } catch (e) {
+        onError("Acceptance failed: ${e.toString()}");
+      }
     } else {
-      onError("You must finish your current task before accepting another.");
+      onError("Finish current task first");
     }
   }
-
-  void finishTask({
+  Future<void> finishTask({
     required LatLng? currentLocation,
     required LatLng? destination,
+    required String? imageUrl,
     required Function onFinished,
     required Function(String) onError,
-  }) {
+  }) async {
     if (acceptedTask == null) {
       onError("No task has been accepted.");
       return;
     }
-    if (currentLocation != null && destination != null) {
-      final distanceCalculator = Distance();
-      final distanceInMeters = distanceCalculator(currentLocation, destination);
-      if (distanceInMeters <= 50) {
+    
+    if (currentLocation == null || destination == null) {
+      onError("Invalid location data");
+      return;
+    }
+
+    final distanceCalculator = Distance();
+    final distanceInMeters = distanceCalculator(currentLocation, destination);
+
+    if (distanceInMeters > 50) {
+      onError("You must be within 50 meters of destination to complete");
+      return;
+    }
+
+    try {
+      final String baseUrl = "https://supply-y47s.onrender.com";
+      final endpoint = "/delivery/complete_delivery";
+      final uri = Uri.parse('$baseUrl$endpoint');
+
+      final response = await http.post(
+        uri,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer ${await _authService.getToken()}",
+        },
+        body: jsonEncode({
+          "delivery_id": acceptedTask!.id,
+          "proof_url": imageUrl,
+          "end_lat": currentLocation.latitude,
+          "end_lon": currentLocation.longitude,
+        }),
+      );
+
+      if (response.statusCode == 200) {
         acceptedTask = null;
         onFinished();
       } else {
-        onError("You haven't reached the destination yet.");
+        onError("Failed to complete task: ${response.body}");
       }
+    } catch (e) {
+      onError("Task completion error: ${e.toString()}");
     }
   }
 
@@ -234,24 +274,22 @@ class TaskHandler {
     }
   }
 
-  Future<void> updateDeliveryStatus(int deliveryId) async {
+ Future<void> updateDeliveryStatus(int deliveryId) async {
     final String baseUrl = 'https://supply-y47s.onrender.com';
     final url = Uri.parse(
-        '$baseUrl/delivery/delivery_picked_up?delivery_id=$deliveryId');
-    final token = await _authService.getToken();
-    print("the task id int update: $deliveryId");
+      '$baseUrl/delivery/delivery_picked_up?delivery_id=$deliveryId'
+    );
+    
     final response = await http.post(
       url,
       headers: {
         'accept': 'application/json',
-        'Authorization': 'Bearer $token',
+        'Authorization': 'Bearer ${await _authService.getToken()}',
       },
     );
+
     if (response.statusCode != 200) {
-      throw Exception(
-          'Failed to update delivery status: ${response.statusCode}');
-    } else if (response.statusCode == 200) {
-      print('Delivery status updated successfully');
+      throw Exception('Status update failed: ${response.statusCode}');
     }
   }
 

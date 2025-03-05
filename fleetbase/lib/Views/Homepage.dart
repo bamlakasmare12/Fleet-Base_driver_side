@@ -1,9 +1,12 @@
+import 'dart:io';
 import 'dart:ui';
 import '../Model/task_model.dart' as taskmodel;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:async';
+import 'package:camera/camera.dart';
+import 'package:image_picker/image_picker.dart';
 import '../Services/Location_manager.dart';
 import '../Services/route_service.dart';
 import '../Services/task_handler.dart';
@@ -12,8 +15,9 @@ import '../Model/Task.dart' as taskFile;
 import '../Views/Menu.dart';
 import '../Services/cache_manager.dart';
 import '../Services/auth_service.dart';
-
+import '../Services/camera_service.dart';
 import '../Services/gpsupdate.dart'; // New service for sending GPS updates
+import '../Services/supabase_storage.dart';
 
 class Homepage extends StatefulWidget {
   const Homepage({super.key});
@@ -27,6 +31,7 @@ class _HomepageState extends State<Homepage> {
   final TextEditingController _searchController = TextEditingController();
   final DraggableScrollableController _sheetController =
       DraggableScrollableController();
+  final CameraService cameraService = CameraService();
 
   final DeliveryHandler deliveryHandler = DeliveryHandler();
   final LocationHandler locationHandler = LocationHandler();
@@ -91,7 +96,7 @@ class _HomepageState extends State<Homepage> {
             int delId = acceptedTask!.id;
             // Update the backend with the new location.
             await gpsUpdateService.updateLocation(delId);
-             mapController.move(newLocation, 16);
+            mapController.move(newLocation, 16);
           }
         }();
       },
@@ -138,9 +143,9 @@ class _HomepageState extends State<Homepage> {
             setState(() async {
               _destination = LatLng(task.destinationLatitude ?? 0.0,
                   task.destinationLongitude ?? 0.0);
-              acceptedTask = task;
               _route = await routeHandler.getRoute(
                   current: _currentDestination!, destination: _destination!);
+              acceptedTask = task;
             });
             foundInTransit = true;
             break; // Exit the loop once we find a task in transit
@@ -270,23 +275,50 @@ class _HomepageState extends State<Homepage> {
     });
   }
 
-  void finishTask() {
+  void finishTask() async {
+  try {
+    // Step 1: Take picture
+    final File? image = await cameraService.takePicture();
+    if (image == null) return;
+
+    // Step 2: Upload to Supabase
+    setState(() => _isLoading = true);
+    final supabaseStorage = SupabaseStorage();
+    final String? imageUrl = await supabaseStorage.uploadDeliveryProof(image);
+    
+    if (imageUrl == null) {
+      throw Exception('Failed to get image URL');
+    }
+
+    // Step 3: Complete the task with image URL
     taskHandler.finishTask(
       currentLocation: _currentDestination,
       destination: _destination,
+      imageUrl: imageUrl, // Add this parameter to your finishTask method
       onFinished: () {
-        setState(() {});
+        setState(() {
+          acceptedTask = null;
+          _destination = null;
+          _route = [];
+          _isLoading = false;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("Task finished successfully."),
+            content: Text("Task finished successfully with photo!"),
             backgroundColor: Colors.green,
           ),
         );
       },
-      onError: _showError,
+      onError: (error) {
+        setState(() => _isLoading = false);
+        _showError(error.toString());
+      },
     );
+  } catch (e) {
+    setState(() => _isLoading = false);
+    _showError('Failed to capture/upload photo: ${e.toString()}');
   }
-
+}
   Future<void> routeToAcceptedTask() async {
     await taskHandler.routeToAcceptedTask(
       fetchCoordinatesCallback: _fetchCoordinates,
@@ -581,12 +613,13 @@ class _HomepageState extends State<Homepage> {
               right: 20,
               child: ElevatedButton(
                 onPressed: () {
-                  if (acceptedTask != null)
-                    routeToAcceptedTask();
-                  else {
+                  if (acceptedTask != null && _destination != null) {
+                    //  Directly use pre-cached destination
+                    mapController.move(_destination!, 14);
+                  } else {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
-                        content: Text("no Delivery is in route"),
+                        content: Text("No delivery is in route"),
                         backgroundColor: Colors.red,
                       ),
                     );
@@ -606,6 +639,7 @@ class _HomepageState extends State<Homepage> {
               right: 20,
               child: ElevatedButton(
                 onPressed: finishTask,
+                
                 style: ElevatedButton.styleFrom(
                   shape: const CircleBorder(),
                   padding: const EdgeInsets.all(16),
@@ -814,10 +848,25 @@ class _HomepageState extends State<Homepage> {
                     setState(() {
                       acceptedTask = taskHandler.acceptedTask = task;
                       taskHandler.updateDeliveryStatus(task.id);
+                      // 🔥 Directly set destination from task coordinates
+                      _destination = LatLng(
+                        task.destinationLatitude ?? 0.0,
+                        task.destinationLongitude ?? 0.0,
+                      );
                     });
-                    await _fetchCoordinates(
-                        "${task.destinationLatitude},${task.destinationLongitude}");
-                    print("task id: ${task.orderId} delivery id ${task.id}");
+
+                    // Generate route after setting destination
+                    if (_currentDestination != null && _destination != null) {
+                      List<LatLng> newRoute = await routeHandler.getRoute(
+                        current: _currentDestination!,
+                        destination: _destination!,
+                      );
+                      setState(() {
+                        _route = newRoute;
+                      });
+                      mapController.move(_destination!, 14); // Recenter map
+                    }
+
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text("Task '${task.id}' accepted."),
