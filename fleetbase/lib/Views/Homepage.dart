@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui';
 import '../Model/task_model.dart' as taskmodel;
 import 'package:flutter/material.dart';
@@ -278,7 +279,7 @@ class _HomepageState extends State<Homepage> {
   void finishTask() async {
   try {
     // Step 1: Take picture
-    final File? image = await cameraService.takePicture();
+    final Uint8List? image = await cameraService.takePicture();
     if (image == null) return;
 
     // Step 2: Upload to Supabase
