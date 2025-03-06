@@ -73,7 +73,7 @@ class TaskHandler {
 
     try {
       final String baseUrl = "https://supply-y47s.onrender.com";
-      final endpoint = "/delivery/complete_delivery";
+      final endpoint = "/delivery/delivery_deliveried${acceptedTask!.id}";
       final uri = Uri.parse('$baseUrl$endpoint');
 
       final response = await http.post(
@@ -82,13 +82,9 @@ class TaskHandler {
           "Content-Type": "application/json",
           "Authorization": "Bearer ${await _authService.getToken()}",
         },
-        body: jsonEncode({
-          "delivery_id": acceptedTask!.id,
-          "proof_url": imageUrl,
-          "end_lat": currentLocation.latitude,
-          "end_lon": currentLocation.longitude,
-        }),
+       
       );
+      
 
       if (response.statusCode == 200) {
         acceptedTask = null;

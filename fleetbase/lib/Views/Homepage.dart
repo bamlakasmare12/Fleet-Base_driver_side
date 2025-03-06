@@ -499,7 +499,7 @@ class _HomepageState extends State<Homepage> {
               child: FlutterMap(
                 mapController: mapController,
                 options: MapOptions(
-                  initialCenter: _currentDestination ?? const LatLng(0, 0),
+                  initialCenter: _currentDestination! ,
                   initialZoom: 3,
                   minZoom: 3,
                   maxZoom: 100,

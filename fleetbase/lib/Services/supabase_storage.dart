@@ -13,11 +13,11 @@ class SupabaseStorage {
       final filePath = 'deliveries/${DateTime.now().toIso8601String()}.jpg';
 
       await _supabase.storage
-          .from('delivery-proofs')
+          .from('client_signature')
           .upload(filePath, bytes as File, fileOptions: FileOptions(contentType: 'image/jpeg'));
 
       return _supabase.storage
-          .from('delivery-proofs')
+          .from('client_signature')
           .getPublicUrl(filePath);
     } catch (e) {
       throw Exception('Upload failed: $e');
