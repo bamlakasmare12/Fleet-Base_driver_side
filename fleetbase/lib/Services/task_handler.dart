@@ -73,7 +73,7 @@ class TaskHandler {
 
     try {
       final String baseUrl = "https://supply-y47s.onrender.com";
-      final endpoint = "/delivery/delivery_deliveried${acceptedTask!.id}";
+      final endpoint = "/delivery/delivery_deliveried?delivery_id=${acceptedTask!.id}";
       final uri = Uri.parse('$baseUrl$endpoint');
 
       final response = await http.post(
@@ -85,8 +85,8 @@ class TaskHandler {
        
       );
       final String baseUrl2 = "https://supply-y47s.onrender.com";
-    final endpoint2 = "/delivery/client_signature?delivery_id=${acceptedTask!.id}&signature=$imageUrl";
-      final uri2 = Uri.parse('$baseUrl$endpoint2');
+    final endpoint2 = "/delivery/add_client_signature?delivery_id=${acceptedTask!.id}&signature=$imageUrl";
+      final uri2 = Uri.parse('$baseUrl2$endpoint2');
 
       final response2 = await http.post(
         uri2,
@@ -101,7 +101,7 @@ class TaskHandler {
         acceptedTask = null;
         onFinished();
       } else {
-        onError("Failed to complete task: ${response.body}");
+        onError("Failed to complete task: ${response.body}/ ${response2.body}");
       }
     } catch (e) {
       onError("Task completion error: ${e.toString()}");

@@ -41,7 +41,7 @@ class HistoryPage extends StatelessWidget {
                     margin: const EdgeInsets.all(8.0),
                     child: ListTile(
                       leading: const Icon(Icons.history),
-                      title: Text(item.created_by),
+                      title: Text("Delivery id: ${item.id }"),
                       subtitle: Text(
                           'Started At: ${item.started_at}\nDestination to: ${item.destinationName}\nFinished delivery at: ${item.deliverd_at}'),
                     ),
