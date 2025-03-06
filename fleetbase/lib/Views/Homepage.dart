@@ -61,6 +61,8 @@ class _HomepageState extends State<Homepage> {
   static const double _currentLocationSize = 40.0;
   static const Color _taskColor = Colors.blue;
   static const Color _warehouseColor = Colors.orange;
+  bool _isLocationLoaded = false;
+
   @override
   void initState() {
     super.initState();
@@ -72,60 +74,63 @@ class _HomepageState extends State<Homepage> {
 
   Future<void> _initializeApp() async {
     // Get the user ID from the auth service.
+    setState(() => _isLocationLoaded = true);
 
     // Get the current location once and move the map.
-    locationHandler.getCurrentLocation().then((location) {
-      if (location != null) {
-        setState(() {
-          _currentDestination = location.coordinates;
-        });
-        mapController.move(location.coordinates, 16);
-      }
-    });
+    final location = await locationHandler.getCurrentLocation();
+    if (location != null && mounted) {
+      setState(() {
+        _currentDestination = location.coordinates;
+        _isLocationLoaded = true; // Location obtained
+      });
+      mapController.move(location.coordinates, 16);
+    }
 
-    // Initialize continuous location updates.
-    locationHandler.initializeLocation(
-      onLocationUpdate: (newLocation) {
-        // Wrap the callback body in an async closure.
-        () async {
+    if (mounted) {
+      // Initialize continuous location updates.
+      locationHandler.initializeLocation(
+        onLocationUpdate: (newLocation) {
+          // Wrap the callback body in an async closure.
+          () async {
+            setState(() {
+              _currentDestination = newLocation;
+              _isLoading = false;
+            });
+            // Get the delivery ID asynchronously (instead of using userId)
+            if (acceptedTask != null) {
+              int delId = acceptedTask!.id;
+              // Update the backend with the new location.
+              await gpsUpdateService.updateLocation(delId);
+              mapController.move(newLocation, 16);
+            }
+          }();
+        },
+        mapController: mapController,
+      );
+
+      // Start a timer to update the current location every 3 seconds.
+      Timer.periodic(const Duration(seconds: 3), (timer) async {
+        final location = await locationHandler.getCurrentLocation();
+        if (location != null) {
           setState(() {
-            _currentDestination = newLocation;
-            _isLoading = false;
+            _currentDestination = location.coordinates;
           });
-          // Get the delivery ID asynchronously (instead of using userId)
+          mapController.move(location.coordinates, 16);
+
+          // Update the backend with the new location if there is an active task.
           if (acceptedTask != null) {
             int delId = acceptedTask!.id;
-            // Update the backend with the new location.
             await gpsUpdateService.updateLocation(delId);
-            mapController.move(newLocation, 16);
           }
-        }();
-      },
-      mapController: mapController,
-    );
-
-    // Start a timer to update the current location every 3 seconds.
-    Timer.periodic(const Duration(seconds: 3), (timer) async {
-      final location = await locationHandler.getCurrentLocation();
-      if (location != null) {
-        setState(() {
-          _currentDestination = location.coordinates;
-        });
-        mapController.move(location.coordinates, 16);
-
-        // Update the backend with the new location if there is an active task.
-        if (acceptedTask != null) {
-          int delId = acceptedTask!.id;
-          await gpsUpdateService.updateLocation(delId);
         }
-      }
-    });
+      });
 
-    // Load fetched tasks from API into the bottom sheet.
-    if (!_isLoading) {
-      await loadDeliveries();
+      // Load fetched tasks from API into the bottom sheet.
+      if (!_isLoading) {
+        await loadDeliveries();
+      }
+      startDeliveryTimer();
     }
-    startDeliveryTimer();
   }
 
   void startDeliveryTimer() {
@@ -277,49 +282,50 @@ class _HomepageState extends State<Homepage> {
   }
 
   void finishTask() async {
-  try {
-    // Step 1: Take picture
-    final Uint8List? image = await cameraService.takePicture();
-    if (image == null) return;
+    try {
+      // Step 1: Take picture
+      final Uint8List? image = await cameraService.takePicture();
+      if (image == null) return;
 
-    // Step 2: Upload to Supabase
-    setState(() => _isLoading = true);
-    final supabaseStorage = SupabaseStorage();
-    final String? imageUrl = await supabaseStorage.uploadDeliveryProof(image);
-    
-    if (imageUrl == null) {
-      throw Exception('Failed to get image URL');
+      // Step 2: Upload to Supabase
+      setState(() => _isLoading = true);
+      final supabaseStorage = SupabaseStorage();
+      final String? imageUrl = await supabaseStorage.uploadDeliveryProof(image);
+
+      if (imageUrl == null) {
+        throw Exception('Failed to get image URL');
+      }
+
+      // Step 3: Complete the task with image URL
+      taskHandler.finishTask(
+        currentLocation: _currentDestination,
+        destination: _destination,
+        imageUrl: imageUrl, // Add this parameter to your finishTask method
+        onFinished: () {
+          setState(() {
+            acceptedTask = null;
+            _destination = null;
+            _route = [];
+            _isLoading = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Task finished successfully with photo!"),
+              backgroundColor: Colors.green,
+            ),
+          );
+        },
+        onError: (error) {
+          setState(() => _isLoading = false);
+          _showError(error.toString());
+        },
+      );
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showError('Failed to capture/upload photo: ${e.toString()}');
     }
-
-    // Step 3: Complete the task with image URL
-    taskHandler.finishTask(
-      currentLocation: _currentDestination,
-      destination: _destination,
-      imageUrl: imageUrl, // Add this parameter to your finishTask method
-      onFinished: () {
-        setState(() {
-          acceptedTask = null;
-          _destination = null;
-          _route = [];
-          _isLoading = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Task finished successfully with photo!"),
-            backgroundColor: Colors.green,
-          ),
-        );
-      },
-      onError: (error) {
-        setState(() => _isLoading = false);
-        _showError(error.toString());
-      },
-    );
-  } catch (e) {
-    setState(() => _isLoading = false);
-    _showError('Failed to capture/upload photo: ${e.toString()}');
   }
-}
+
   Future<void> routeToAcceptedTask() async {
     await taskHandler.routeToAcceptedTask(
       fetchCoordinatesCallback: _fetchCoordinates,
@@ -476,10 +482,12 @@ class _HomepageState extends State<Homepage> {
           ),
         ],
       ),
-      body: GestureDetector(
+      body:_isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : GestureDetector(
         onTap: () async {
           final currentExtent = _sheetController.size;
-          final targetExtent = currentExtent <= 0.14 ? 0.4 : 0.14;
+          final targetExtent = currentExtent <= 0.2 ? 0.4 : 0.2;
           await _sheetController.animateTo(
             targetExtent,
             duration: const Duration(milliseconds: 300),
@@ -489,6 +497,8 @@ class _HomepageState extends State<Homepage> {
         child: Stack(
           fit: StackFit.expand,
           children: [
+          if (_isLocationLoaded) // Only build map when location is ready
+
             Container(
               width: screenwidth,
               height: screenheight * 0.9,
@@ -500,7 +510,7 @@ class _HomepageState extends State<Homepage> {
               child: FlutterMap(
                 mapController: mapController,
                 options: MapOptions(
-                  initialCenter: _currentDestination! ,
+                  initialCenter: _currentDestination!,
                   initialZoom: 3,
                   minZoom: 3,
                   maxZoom: 100,
@@ -640,7 +650,6 @@ class _HomepageState extends State<Homepage> {
               right: 20,
               child: ElevatedButton(
                 onPressed: finishTask,
-                
                 style: ElevatedButton.styleFrom(
                   shape: const CircleBorder(),
                   padding: const EdgeInsets.all(16),
@@ -659,9 +668,9 @@ class _HomepageState extends State<Homepage> {
                   Expanded(
                     child: DraggableScrollableSheet(
                       controller: _sheetController,
-                      initialChildSize: 0.14,
-                      minChildSize: 0.1,
-                      maxChildSize: 0.4,
+                      initialChildSize: 0.20,
+                      minChildSize: 0.2,
+                      maxChildSize: 0.80,
                       builder: (context, scrollController) => Container(
                         decoration: const BoxDecoration(
                           color: Colors.white,
@@ -671,7 +680,7 @@ class _HomepageState extends State<Homepage> {
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black26,
+                              color: Colors.black45,
                               blurRadius: 10,
                               spreadRadius: 1,
                               offset: Offset(0, -3),
@@ -684,7 +693,7 @@ class _HomepageState extends State<Homepage> {
                               onTap: () async {
                                 final currentExtent = _sheetController.size;
                                 final targetExtent =
-                                    currentExtent <= 0.14 ? 0.4 : 0.14;
+                                    currentExtent <= 0.2 ? 0.8 : 0.2;
                                 await _sheetController.animateTo(
                                   targetExtent,
                                   duration: const Duration(milliseconds: 300),
@@ -748,7 +757,7 @@ class _HomepageState extends State<Homepage> {
               fontSize: 18, color: Colors.black, fontWeight: FontWeight.bold),
         ),
         subtitle: Text(
-          "Instruction: ${task.deliveryInstructions}\nStatus: ${task.status}\nLocation: ${task.destinationLongitude}, ${task.destinationLatitude}",
+          "Instruction: ${task.deliveryInstructions}\nStatus: ${task.status}\nLocation: ${task.destinationAddress} ",
           style: const TextStyle(fontSize: 16, color: Colors.black),
         ),
         onTap: () async {
