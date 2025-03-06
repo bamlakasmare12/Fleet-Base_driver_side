@@ -66,14 +66,14 @@ class TaskHandler {
     final distanceCalculator = Distance();
     final distanceInMeters = distanceCalculator(currentLocation, destination);
 
-    if (distanceInMeters > 50) {
-      onError("You must be within 50 meters of destination to complete");
-      return;
-    }
+    // if (distanceInMeters > 50) {
+    //   onError("You must be within 50 meters of destination to complete");
+    //   return;
+    // }
 
     try {
       final String baseUrl = "https://supply-y47s.onrender.com";
-      final endpoint = "/delivery/delivery_deliveried${acceptedTask!.id}";
+      final endpoint = "/delivery/delivery_deliveried${acceptedTask!.orderId}";
       final uri = Uri.parse('$baseUrl$endpoint');
 
       final response = await http.post(
@@ -84,9 +84,20 @@ class TaskHandler {
         },
        
       );
-      
+      final String baseUrl2 = "https://supply-y47s.onrender.com";
+    final endpoint2 = "/delivery/client_signature?delivery_id=${acceptedTask!.orderId}&signature=$imageUrl";
+      final uri2 = Uri.parse('$baseUrl$endpoint');
 
-      if (response.statusCode == 200) {
+      final response2 = await http.post(
+        uri2,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer ${await _authService.getToken()}",
+        },
+       
+      );
+
+      if (response.statusCode == 200 && response2.statusCode == 200) {
         acceptedTask = null;
         onFinished();
       } else {

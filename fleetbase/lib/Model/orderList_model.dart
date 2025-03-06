@@ -14,18 +14,18 @@ class OrderDelivery {
   });
 
   factory OrderDelivery.fromJson(Map<String, dynamic> json) {
-    return OrderDelivery(
-      orderDetails: OrderDetails.fromJson(json['order_details']),
-      orderItems: (json['order_items'] as List)
-          .map((item) => OrderItem.fromJson(item))
-          .toList(),
-      total: json['total'] as int,
-      clientDetails: ClientDetails.fromJson(json['client_details']),
-      productMap: (json['product_map'] as List)
-          .map((item) => ProductMap.fromJson(item))
-          .toList(),
-    );
-  }
+  return OrderDelivery(
+    orderDetails: OrderDetails.fromJson(json['order_details']),
+    orderItems: (json['order_items'] as List)
+        .map((item) => OrderItem.fromJson(item))
+        .toList(),
+    total: (json['total'] as num).toInt(), // Modified
+    clientDetails: ClientDetails.fromJson(json['client_details']),
+    productMap: (json['product_map'] as List)
+        .map((item) => ProductMap.fromJson(item))
+        .toList(),
+  );
+}
 }
 
 class OrderDetails {
@@ -49,18 +49,18 @@ class OrderDetails {
     required this.status,
   });
 
-  factory OrderDetails.fromJson(Map<String, dynamic> json) {
-    return OrderDetails(
-      clientId: json['client_id'] as int,
-      orderDate: DateTime.parse(json['order_date'] as String),
-      organizationId: json['organization_id'] as int,
-      updatedAt: DateTime.parse(json['updated_at'] as String),
-      id: json['id'] as int,
-      userId: json['user_id'] as String,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      status: json['status'] as String,
-    );
-  }
+ factory OrderDetails.fromJson(Map<String, dynamic> json) {
+  return OrderDetails(
+    clientId: (json['client_id'] as num).toInt(), // Modified
+    orderDate: DateTime.parse(json['order_date'] as String),
+    organizationId: (json['organization_id'] as num).toInt(), // Modified
+    updatedAt: DateTime.parse(json['updated_at'] as String),
+    id: (json['id'] as num).toInt(), // Modified
+    userId: json['user_id'] as String,
+    createdAt: DateTime.parse(json['created_at'] as String),
+    status: json['status'] as String,
+  );
+}
 }
 
 class OrderItem {
@@ -79,14 +79,14 @@ class OrderItem {
   });
 
   factory OrderItem.fromJson(Map<String, dynamic> json) {
-    return OrderItem(
-      price: json['price'] as int,
-      id: json['id'] as int,
-      productId: json['product_id'] as int,
-      quantity: json['quantity'] as int,
-      orderId: json['order_id'] as int,
-    );
-  }
+  return OrderItem(
+    price: (json['price'] as num).toInt(), // Modified
+    id: (json['id'] as num).toInt(), // Modified
+    productId: (json['product_id'] as num).toInt(), // Modified
+    quantity: (json['quantity'] as num).toInt(), // Modified
+    orderId: (json['order_id'] as num).toInt(), // Modified
+  );
+}
 }
 
 class ClientDetails {
@@ -139,13 +139,13 @@ class ProductMap {
   });
 
   factory ProductMap.fromJson(Map<String, dynamic> json) {
-    return ProductMap(
-      productId: json['product_id'] as int,
-      productName: json['product_name'] as String,
-      warehouseId: json['warehouse_id'] as int,
-      warehouseName: json['warehouse_name'] as String,
-      quantity: json['quantity'] as int,
-      price: json['price'] as int,
-    );
-  }
+  return ProductMap(
+    productId: (json['product_id'] as num).toInt(), // Modified
+    productName: json['product_name'] as String,
+    warehouseId: (json['warehouse_id'] as num).toInt(), // Modified
+    warehouseName: json['warehouse_name'] as String,
+    quantity: (json['quantity'] as num).toInt(), // Modified
+    price: (json['price'] as num).toInt(), // Modified
+  );
+}
 }
