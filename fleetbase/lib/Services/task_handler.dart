@@ -73,7 +73,7 @@ class TaskHandler {
 
     try {
       final String baseUrl = "https://supply-y47s.onrender.com";
-      final endpoint = "/delivery/delivery_deliveried?delivery_id=${acceptedTask!.id}";
+      final endpoint = "/delivery/delivery_delivered?delivery_id=${acceptedTask!.id}";
       final uri = Uri.parse('$baseUrl$endpoint');
 
       final response = await http.post(
@@ -100,8 +100,9 @@ class TaskHandler {
       if (response.statusCode == 200 && response2.statusCode == 200) {
         acceptedTask = null;
         onFinished();
-      } else {
-        onError("Failed to complete task: ${response.body}/ ${response2.body}");
+      
+      }else {
+        onError("Failed to complete task: ${response.statusCode}/ ${response2.statusCode}");
       }
     } catch (e) {
       onError("Task completion error: ${e.toString()}");
