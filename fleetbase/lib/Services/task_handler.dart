@@ -63,8 +63,8 @@ class TaskHandler {
       return;
     }
 
-    final distanceCalculator = Distance();
-    final distanceInMeters = distanceCalculator(currentLocation, destination);
+    // final distanceCalculator = Distance();
+    // final distanceInMeters = distanceCalculator(currentLocation, destination);
 
     // if (distanceInMeters > 50) {
     //   onError("You must be within 50 meters of destination to complete");

@@ -86,51 +86,49 @@ class _HomepageState extends State<Homepage> {
       mapController.move(location.coordinates, 16);
     }
 
-    if (mounted) {
-      // Initialize continuous location updates.
-      locationHandler.initializeLocation(
-        onLocationUpdate: (newLocation) {
-          // Wrap the callback body in an async closure.
-          () async {
-            setState(() {
-              _currentDestination = newLocation;
-              _isLoading = false;
-            });
-            // Get the delivery ID asynchronously (instead of using userId)
-            if (acceptedTask != null) {
-              int delId = acceptedTask!.id;
-              // Update the backend with the new location.
-              await gpsUpdateService.updateLocation(delId);
-              mapController.move(newLocation, 16);
-            }
-          }();
-        },
-        mapController: mapController,
-      );
-
-      // Start a timer to update the current location every 3 seconds.
-      Timer.periodic(const Duration(seconds: 3), (timer) async {
-        final location = await locationHandler.getCurrentLocation();
-        if (location != null) {
+    // Initialize continuous location updates.
+    locationHandler.initializeLocation(
+      onLocationUpdate: (newLocation) {
+        // Wrap the callback body in an async closure.
+        () async {
           setState(() {
-            _currentDestination = location.coordinates;
+            _currentDestination = newLocation;
+            _isLoading = false;
           });
-          mapController.move(location.coordinates, 16);
-
-          // Update the backend with the new location if there is an active task.
+          // Get the delivery ID asynchronously (instead of using userId)
           if (acceptedTask != null) {
             int delId = acceptedTask!.id;
+            // Update the backend with the new location.
             await gpsUpdateService.updateLocation(delId);
+            mapController.move(newLocation, 16);
           }
-        }
-      });
+        }();
+      },
+      mapController: mapController,
+    );
 
-      // Load fetched tasks from API into the bottom sheet.
-      if (!_isLoading) {
-        await loadDeliveries();
+    // Start a timer to update the current location every 3 seconds.
+    Timer.periodic(const Duration(seconds: 3), (timer) async {
+      final location = await locationHandler.getCurrentLocation();
+      if (location != null) {
+        setState(() {
+          _currentDestination = location.coordinates;
+        });
+        mapController.move(location.coordinates, 16);
+
+        // Update the backend with the new location if there is an active task.
+        if (acceptedTask != null) {
+          int delId = acceptedTask!.id;
+          await gpsUpdateService.updateLocation(delId);
+        }
       }
-      startDeliveryTimer();
+    });
+
+    // Load fetched tasks from API into the bottom sheet.
+    if (!_isLoading) {
+      await loadDeliveries();
     }
+    startDeliveryTimer();
   }
 
   void startDeliveryTimer() {
@@ -282,47 +280,61 @@ class _HomepageState extends State<Homepage> {
   }
 
   void finishTask() async {
-    try {
-      // Step 1: Take picture
-      final Uint8List? image = await cameraService.takePicture();
-      if (image == null) return;
+    final distanceCalculator = Distance();
+    final distanceInMeters =
+        distanceCalculator(_currentDestination!, _destination!);
 
-      // Step 2: Upload to Supabase
-      setState(() => _isLoading = true);
-      final supabaseStorage = SupabaseStorage();
-      final String? imageUrl = await supabaseStorage.uploadDeliveryProof(image);
+    // if
+    if (acceptedTask == null) {
+      _showError("No task is being delivered, accept a task first");
+      return;
+    } else if (distanceInMeters > 50) {
+      _showError("You must be within 50 meters of destination to complete");
+      return;
+    } else {
+      try {
+        // Step 1: Take picture
+        final Uint8List? image = await cameraService.takePicture();
+        if (image == null) return;
 
-      if (imageUrl == null) {
-        throw Exception('Failed to get image URL');
+        // Step 2: Upload to Supabase
+        setState(() => _isLoading = true);
+        final supabaseStorage = SupabaseStorage();
+        final String? imageUrl =
+            await supabaseStorage.uploadDeliveryProof(image);
+
+        if (imageUrl == null) {
+          throw Exception('Failed to get image URL');
+        }
+
+        // Step 3: Complete the task with image URL
+        taskHandler.finishTask(
+          currentLocation: _currentDestination,
+          destination: _destination,
+          imageUrl: imageUrl, // Add this parameter to your finishTask method
+          onFinished: () {
+            setState(() {
+              acceptedTask = null;
+              _destination = null;
+              _route = [];
+              _isLoading = false;
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("Task finished successfully with photo!"),
+                backgroundColor: Colors.green,
+              ),
+            );
+          },
+          onError: (error) {
+            setState(() => _isLoading = false);
+            _showError(error.toString());
+          },
+        );
+      } catch (e) {
+        setState(() => _isLoading = false);
+        _showError('Failed to capture/upload photo: ${e.toString()}');
       }
-
-      // Step 3: Complete the task with image URL
-      taskHandler.finishTask(
-        currentLocation: _currentDestination,
-        destination: _destination,
-        imageUrl: imageUrl, // Add this parameter to your finishTask method
-        onFinished: () {
-          setState(() {
-            acceptedTask = null;
-            _destination = null;
-            _route = [];
-            _isLoading = false;
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Task finished successfully with photo!"),
-              backgroundColor: Colors.green,
-            ),
-          );
-        },
-        onError: (error) {
-          setState(() => _isLoading = false);
-          _showError(error.toString());
-        },
-      );
-    } catch (e) {
-      setState(() => _isLoading = false);
-      _showError('Failed to capture/upload photo: ${e.toString()}');
     }
   }
 
@@ -482,271 +494,276 @@ class _HomepageState extends State<Homepage> {
           ),
         ],
       ),
-      body:_isLoading
+      body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : GestureDetector(
-        onTap: () async {
-          final currentExtent = _sheetController.size;
-          final targetExtent = currentExtent <= 0.2 ? 0.4 : 0.2;
-          await _sheetController.animateTo(
-            targetExtent,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-          );
-        },
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-          if (_isLocationLoaded) // Only build map when location is ready
-
-            Container(
-              width: screenwidth,
-              height: screenheight * 0.9,
-              decoration: BoxDecoration(
-                border:
-                    Border.all(color: Colors.grey.withOpacity(0.5), width: 1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: FlutterMap(
-                mapController: mapController,
-                options: MapOptions(
-                  initialCenter: _currentDestination!,
-                  initialZoom: 3,
-                  minZoom: 3,
-                  maxZoom: 100,
-                ),
+              onTap: () async {
+                final currentExtent = _sheetController.size;
+                final targetExtent = currentExtent <= 0.2 ? 0.4 : 0.2;
+                await _sheetController.animateTo(
+                  targetExtent,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                );
+              },
+              child: Stack(
+                fit: StackFit.expand,
                 children: [
-                  TileLayer(
-                    urlTemplate:
-                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'com.example.app',
-                  ),
-                  if (_destination != null)
-                    MarkerLayer(markers: [
-                      Marker(
-                        point: _destination!,
-                        width: 80,
-                        height: 80,
-                        child: IconButton(
-                          onPressed: () {},
-                          icon: const Icon(Icons.location_pin),
-                          color: Colors.green,
-                          iconSize: 40,
-                        ),
+                  if (_isLocationLoaded) // Only build map when location is ready
+
+                    Container(
+                      width: screenwidth,
+                      height: screenheight * 0.9,
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                            color: Colors.grey.withOpacity(0.5), width: 1),
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                    ]),
-                  MarkerLayer(markers: [
-                    Marker(
-                        point: _currentDestination!,
-                        width: 80,
-                        height: 80,
-                        child: Column(
-                          children: [
-                            Text(
-                              "My Location",
-                              style: TextStyle(
-                                color: Colors.black,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                backgroundColor: Colors.white.withOpacity(0.8),
+                      child: FlutterMap(
+                        mapController: mapController,
+                        options: MapOptions(
+                          initialCenter: _currentDestination!,
+                          initialZoom: 3,
+                          minZoom: 3,
+                          maxZoom: 100,
+                        ),
+                        children: [
+                          TileLayer(
+                            urlTemplate:
+                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            userAgentPackageName: 'com.example.app',
+                          ),
+                          if (_destination != null)
+                            MarkerLayer(markers: [
+                              Marker(
+                                point: _destination!,
+                                width: 80,
+                                height: 80,
+                                child: IconButton(
+                                  onPressed: () {},
+                                  icon: const Icon(Icons.location_pin),
+                                  color: Colors.green,
+                                  iconSize: 40,
+                                ),
                               ),
-                            ),
-                            const Icon(
-                              Icons.location_pin,
-                              color: Colors.red,
-                              size: 40,
-                            ),
-                          ],
-                        )),
-                  ]),
-                  // Added MarkerLayer for displaying multiple warehouse markers.
-                  MarkerLayer(
-                    markers: _selectedWarehouses
-                        .map((warehouse) => Marker(
-                              point: LatLng(
-                                  warehouse.latitude, warehouse.longitude),
-                              width: 80,
-                              height: 80,
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    warehouse.name,
-                                    style: TextStyle(
-                                      color: Colors.black,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      backgroundColor:
-                                          Colors.white.withOpacity(0.8),
+                            ]),
+                          MarkerLayer(markers: [
+                            Marker(
+                                point: _currentDestination!,
+                                width: 80,
+                                height: 80,
+                                child: Column(
+                                  children: [
+                                    Text(
+                                      "My Location",
+                                      style: TextStyle(
+                                        color: Colors.black,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        backgroundColor:
+                                            Colors.white.withOpacity(0.8),
+                                      ),
                                     ),
-                                  ),
-                                  const Icon(
-                                    Icons.warehouse,
-                                    color: Colors.blue,
-                                    size: 40,
+                                    const Icon(
+                                      Icons.location_pin,
+                                      color: Colors.red,
+                                      size: 40,
+                                    ),
+                                  ],
+                                )),
+                          ]),
+                          // Added MarkerLayer for displaying multiple warehouse markers.
+                          MarkerLayer(
+                            markers: _selectedWarehouses
+                                .map((warehouse) => Marker(
+                                      point: LatLng(warehouse.latitude,
+                                          warehouse.longitude),
+                                      width: 80,
+                                      height: 80,
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            warehouse.name,
+                                            style: TextStyle(
+                                              color: Colors.black,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.bold,
+                                              backgroundColor:
+                                                  Colors.white.withOpacity(0.8),
+                                            ),
+                                          ),
+                                          const Icon(
+                                            Icons.warehouse,
+                                            color: Colors.blue,
+                                            size: 40,
+                                          ),
+                                        ],
+                                      ),
+                                    ))
+                                .toList(),
+                          ),
+
+                          PolylineLayer(
+                            polylines: [
+                              Polyline(
+                                points: _route,
+                                color: Colors.green,
+                                strokeWidth: 4.0,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  Positioned(
+                    top: 20,
+                    right: 20,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        // QR code scanner functionality
+                      },
+                      style: ElevatedButton.styleFrom(
+                        shape: const CircleBorder(),
+                        padding: const EdgeInsets.all(16),
+                        backgroundColor: Colors.white,
+                        elevation: 10,
+                      ),
+                      child: const Icon(Icons.qr_code_scanner,
+                          color: Colors.black),
+                    ),
+                  ),
+                  Positioned(
+                    top: 80,
+                    right: 20,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        if (acceptedTask != null && _destination != null) {
+                          //  Directly use pre-cached destination
+                          mapController.move(_destination!, 14);
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("No delivery is in route"),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        shape: const CircleBorder(),
+                        padding: const EdgeInsets.all(16),
+                        backgroundColor: Colors.white,
+                        elevation: 10,
+                      ),
+                      child: const Icon(Icons.route, color: Colors.black),
+                    ),
+                  ),
+                  Positioned(
+                    top: 140,
+                    right: 20,
+                    child: ElevatedButton(
+                      onPressed: finishTask,
+                      style: ElevatedButton.styleFrom(
+                        shape: const CircleBorder(),
+                        padding: const EdgeInsets.all(16),
+                        backgroundColor: Colors.white,
+                        elevation: 10,
+                      ),
+                      child: const Icon(Icons.stop, color: Colors.black),
+                    ),
+                  ),
+                  Positioned.fill(
+                    child: Column(
+                      children: [
+                        SizedBox(
+                            height: MediaQuery.of(context).padding.top +
+                                kToolbarHeight),
+                        Expanded(
+                          child: DraggableScrollableSheet(
+                            controller: _sheetController,
+                            initialChildSize: 0.20,
+                            minChildSize: 0.2,
+                            maxChildSize: 0.80,
+                            builder: (context, scrollController) => Container(
+                              decoration: const BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.only(
+                                  topLeft: Radius.circular(20),
+                                  topRight: Radius.circular(20),
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black45,
+                                    blurRadius: 10,
+                                    spreadRadius: 1,
+                                    offset: Offset(0, -3),
                                   ),
                                 ],
                               ),
-                            ))
-                        .toList(),
-                  ),
-
-                  PolylineLayer(
-                    polylines: [
-                      Polyline(
-                        points: _route,
-                        color: Colors.green,
-                        strokeWidth: 4.0,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            Positioned(
-              top: 20,
-              right: 20,
-              child: ElevatedButton(
-                onPressed: () {
-                  // QR code scanner functionality
-                },
-                style: ElevatedButton.styleFrom(
-                  shape: const CircleBorder(),
-                  padding: const EdgeInsets.all(16),
-                  backgroundColor: Colors.white,
-                  elevation: 10,
-                ),
-                child: const Icon(Icons.qr_code_scanner, color: Colors.black),
-              ),
-            ),
-            Positioned(
-              top: 80,
-              right: 20,
-              child: ElevatedButton(
-                onPressed: () {
-                  if (acceptedTask != null && _destination != null) {
-                    //  Directly use pre-cached destination
-                    mapController.move(_destination!, 14);
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text("No delivery is in route"),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
-                },
-                style: ElevatedButton.styleFrom(
-                  shape: const CircleBorder(),
-                  padding: const EdgeInsets.all(16),
-                  backgroundColor: Colors.white,
-                  elevation: 10,
-                ),
-                child: const Icon(Icons.route, color: Colors.black),
-              ),
-            ),
-            Positioned(
-              top: 140,
-              right: 20,
-              child: ElevatedButton(
-                onPressed: finishTask,
-                style: ElevatedButton.styleFrom(
-                  shape: const CircleBorder(),
-                  padding: const EdgeInsets.all(16),
-                  backgroundColor: Colors.white,
-                  elevation: 10,
-                ),
-                child: const Icon(Icons.stop, color: Colors.black),
-              ),
-            ),
-            Positioned.fill(
-              child: Column(
-                children: [
-                  SizedBox(
-                      height:
-                          MediaQuery.of(context).padding.top + kToolbarHeight),
-                  Expanded(
-                    child: DraggableScrollableSheet(
-                      controller: _sheetController,
-                      initialChildSize: 0.20,
-                      minChildSize: 0.2,
-                      maxChildSize: 0.80,
-                      builder: (context, scrollController) => Container(
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.only(
-                            topLeft: Radius.circular(20),
-                            topRight: Radius.circular(20),
+                              child: Column(
+                                children: [
+                                  GestureDetector(
+                                    onTap: () async {
+                                      final currentExtent =
+                                          _sheetController.size;
+                                      final targetExtent =
+                                          currentExtent <= 0.2 ? 0.8 : 0.2;
+                                      await _sheetController.animateTo(
+                                        targetExtent,
+                                        duration:
+                                            const Duration(milliseconds: 300),
+                                        curve: Curves.easeInOut,
+                                      );
+                                    },
+                                    child: Container(
+                                      width: 100,
+                                      margin: const EdgeInsets.symmetric(
+                                          vertical: 10),
+                                      height: 5,
+                                      alignment: Alignment.center,
+                                      decoration: const BoxDecoration(
+                                        color: Colors.black54,
+                                        borderRadius: BorderRadius.all(
+                                            Radius.circular(5)),
+                                      ),
+                                    ),
+                                  ),
+                                  const Text(
+                                    "Upcoming Tasks",
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  Expanded(
+                                    child: _isLoading
+                                        ? const Center(
+                                            child: CircularProgressIndicator())
+                                        : tasks.isEmpty
+                                            ? const Center(
+                                                child:
+                                                    Text("No tasks available"))
+                                            : ListView.builder(
+                                                controller: scrollController,
+                                                // FIX: Use the smaller length to avoid out-of-range errors.
+                                                itemCount: tasks.length,
+                                                itemBuilder: (context, index) =>
+                                                    buildTask(tasks[index]),
+                                              ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black45,
-                              blurRadius: 10,
-                              spreadRadius: 1,
-                              offset: Offset(0, -3),
-                            ),
-                          ],
                         ),
-                        child: Column(
-                          children: [
-                            GestureDetector(
-                              onTap: () async {
-                                final currentExtent = _sheetController.size;
-                                final targetExtent =
-                                    currentExtent <= 0.2 ? 0.8 : 0.2;
-                                await _sheetController.animateTo(
-                                  targetExtent,
-                                  duration: const Duration(milliseconds: 300),
-                                  curve: Curves.easeInOut,
-                                );
-                              },
-                              child: Container(
-                                width: 100,
-                                margin:
-                                    const EdgeInsets.symmetric(vertical: 10),
-                                height: 5,
-                                alignment: Alignment.center,
-                                decoration: const BoxDecoration(
-                                  color: Colors.black54,
-                                  borderRadius:
-                                      BorderRadius.all(Radius.circular(5)),
-                                ),
-                              ),
-                            ),
-                            const Text(
-                              "Upcoming Tasks",
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            Expanded(
-                              child: _isLoading
-                                  ? const Center(
-                                      child: CircularProgressIndicator())
-                                  : tasks.isEmpty
-                                      ? const Center(
-                                          child: Text("No tasks available"))
-                                      : ListView.builder(
-                                          controller: scrollController,
-                                          // FIX: Use the smaller length to avoid out-of-range errors.
-                                          itemCount: tasks.length,
-                                          itemBuilder: (context, index) =>
-                                              buildTask(tasks[index]),
-                                        ),
-                            ),
-                          ],
-                        ),
-                      ),
+                      ],
                     ),
                   ),
                 ],
               ),
             ),
-          ],
-        ),
-      ),
     );
   }
 
