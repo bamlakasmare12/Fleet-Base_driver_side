@@ -138,7 +138,7 @@ class _HomepageState extends State<Homepage> {
         mapController.move(newCoords, 16);
       }
 
-      if (acceptedTask != null && !isSameLocation) {
+      if (acceptedTask != null ) {
         int delId = acceptedTask!.id;
         int del_stat_id = await taskHandler.getdeliveryStatusId(delId);
         print('gps id: ${del_stat_id}');
