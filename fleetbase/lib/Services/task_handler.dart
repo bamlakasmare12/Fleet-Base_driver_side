@@ -53,10 +53,6 @@ required int? id,
     required Function(String) onError,
   }) async {
    
-   
-    
-
- 
     try {
       final String baseUrl = "https://supply-y47s.onrender.com";
       final endpoint = "/delivery/delivery_delivered?delivery_id=${id}";
@@ -71,7 +67,7 @@ required int? id,
        
       );
       final String baseUrl2 = "https://supply-y47s.onrender.com";
-    final endpoint2 = "/delivery/add_client_signature?delivery_id=${acceptedTask!.id}&signature=$imageUrl";
+    final endpoint2 = "/delivery/add_client_signature?delivery_id=${id}&signature=$imageUrl";
       final uri2 = Uri.parse('$baseUrl2$endpoint2');
 
       final response2 = await http.post(
