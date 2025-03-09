@@ -63,14 +63,7 @@ class TaskHandler {
       return;
     }
 
-    // final distanceCalculator = Distance();
-    // final distanceInMeters = distanceCalculator(currentLocation, destination);
-
-    // if (distanceInMeters > 50) {
-    //   onError("You must be within 50 meters of destination to complete");
-    //   return;
-    // }
-
+ 
     try {
       final String baseUrl = "https://supply-y47s.onrender.com";
       final endpoint = "/delivery/delivery_delivered?delivery_id=${acceptedTask!.id}";
@@ -184,6 +177,50 @@ class TaskHandler {
       return null;
     }
   }
+
+Future<int> getdeliveryStatusId(int deliveryid)async{
+final String baseUrl = "https://supply-y47s.onrender.com";
+    final String endpoint = "/delivery/get_latest_delivery_status_update?delivery_id=$deliveryid";
+    final uri = Uri.parse('$baseUrl$endpoint');
+
+    try {
+      final response = await http.get(
+        uri,
+        headers: {
+          "accept": "application/json",
+          "Authorization": "Bearer ${await _authService.getToken()}",
+        },
+      );
+
+      final decoded = jsonDecode(response.body);
+      dynamic rawId;
+
+      // If the response is a list, extract the first element.
+      if (decoded is List && decoded.isNotEmpty) {
+        rawId = decoded[0]['id'];
+      } else if (decoded is Map) {
+        rawId = decoded['id'];
+      } else {
+        print("Unexpected JSON format");
+        return -1;
+      }
+
+      print('The driver id is: $rawId');
+
+      // If rawId is already an int, return it. If it's a string, try to parse it.
+      if (rawId is int) {
+        return rawId;
+      
+      } else {
+        print("Unexpected type for id: ${rawId.runtimeType}");
+        return -1;
+      }
+    } catch (e) {
+      print("Error retrieving user ID: $e");
+      return -1;
+    }
+
+}
 
   Future<List<Task>> fetchDeliveries() async {
     int? drivers = await _authService.getDriverId();
