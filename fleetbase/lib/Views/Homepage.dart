@@ -1,6 +1,9 @@
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui';
+import 'package:location/location.dart';
+
 import '../Model/task_model.dart' as taskmodel;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -8,6 +11,7 @@ import 'package:latlong2/latlong.dart';
 import 'dart:async';
 import 'package:camera/camera.dart';
 import 'package:image_picker/image_picker.dart';
+import '../Views/map_arrow.dart';
 import '../Services/Location_manager.dart';
 import '../Services/route_service.dart';
 import '../Services/task_handler.dart';
@@ -56,7 +60,8 @@ class _HomepageState extends State<Homepage> {
   String deliveryStatusId = '';
   taskFile.Task? acceptedTask;
   Timer? _deliveryTimer;
-
+double _bearing = 0.0;
+LatLng? _previousPosition;
   static const double _markerSize = 40.0;
   static const double _currentLocationSize = 40.0;
   static const Color _taskColor = Colors.blue;
@@ -69,6 +74,26 @@ class _HomepageState extends State<Homepage> {
     _initializeApp();
   }
 
+void _handleLocationUpdate(LocationData newLocation) {
+  final newPosition = LatLng(newLocation.latitude!, newLocation.longitude!);
+  
+  // Calculate bearing only if we have previous position
+  if (_previousPosition != null) {
+    final double deltaLon = newPosition.longitude - _previousPosition!.longitude;
+    final double deltaLat = newPosition.latitude - _previousPosition!.latitude;
+    _bearing = (atan2(deltaLon, deltaLat) * 180) / pi;
+  }
+
+  setState(() {
+    _currentDestination = newPosition;
+    _previousPosition = newPosition;
+  });
+
+  if (acceptedTask != null) {
+    mapController.move(newPosition, mapController.camera.zoom);
+    gpsUpdateService.updateLocation(acceptedTask!.id);
+  }
+}
   /// Initializes the app by getting the user ID, getting the current location once, and starting continuous location updates.
   /// It also loads the fetched tasks from the API into the bottom sheet and starts the delivery timer.
 
@@ -87,25 +112,17 @@ class _HomepageState extends State<Homepage> {
     
 
     // Initialize continuous location updates.
-    locationHandler.initializeLocation(
-      onLocationUpdate: (newLocation) {
-        // Wrap the callback body in an async closure.
-        () async {
-          setState(() {
-            _currentDestination = newLocation;
-            _isLoading = false;
-          });
-          // Get the delivery ID asynchronously (instead of using userId)
-          if (acceptedTask != null) {
-            int delId = acceptedTask!.id;
-            // Update the backend with the new location.
-            await gpsUpdateService.updateLocation(delId);
-            mapController.move(newLocation, 16);
-          }
-        }();
-      },
-      mapController: mapController,
-    );
+   // In _initializeApp()
+locationHandler.initializeLocation(
+  onLocationUpdate: (LatLng newLocation) {
+    final locationData = LocationData.fromMap({
+      'latitude': newLocation.latitude,
+      'longitude': newLocation.longitude,
+    });
+    _handleLocationUpdate(locationData);
+  },
+  mapController: mapController,
+);
 
     // Start a timer to update the current location every 3 seconds.
     Timer.periodic(const Duration(seconds: 3), (timer) async {
@@ -130,6 +147,8 @@ class _HomepageState extends State<Homepage> {
     }
     startDeliveryTimer();
   }
+
+
 
   void startDeliveryTimer() {
     _deliveryTimer = Timer.periodic(const Duration(seconds: 10), (timer) async {
@@ -494,9 +513,7 @@ class _HomepageState extends State<Homepage> {
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : GestureDetector(
+      body:  GestureDetector(
               onTap: () async {
                 final currentExtent = _sheetController.size;
                 final targetExtent = currentExtent <= 0.2 ? 0.4 : 0.2;
@@ -547,7 +564,9 @@ class _HomepageState extends State<Homepage> {
                                 ),
                               ),
                             ]),
-                          MarkerLayer(markers: [
+                             MarkerLayer(markers: [
+                                  if (_route.isEmpty)
+
                             Marker(
                                 point: _currentDestination!,
                                 width: 80,
@@ -572,6 +591,25 @@ class _HomepageState extends State<Homepage> {
                                   ],
                                 )),
                           ]),
+                         MarkerLayer(
+  markers: [
+    if (_currentDestination != null && _route.isNotEmpty)
+      Marker(
+        point: _currentDestination!,
+        width: 40,
+        height: 40,
+        child: Transform.rotate(
+          angle: (_bearing * pi) / 180,
+          child: CustomPaint(
+            painter: ArrowPainter(
+              color: Colors.blue, // Customize color
+              size: 20.0, // Match marker dimensions
+            ),
+          ),
+        ),
+      ),
+  ],
+),
                           // Added MarkerLayer for displaying multiple warehouse markers.
                           MarkerLayer(
                             markers: _selectedWarehouses
