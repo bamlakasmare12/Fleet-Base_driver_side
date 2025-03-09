@@ -78,13 +78,13 @@ class _HomepageState extends State<Homepage> {
 
     // Get the current location once and move the map.
     final location = await locationHandler.getCurrentLocation();
-    if (location != null && mounted) {
+    
       setState(() {
-        _currentDestination = location.coordinates;
+        _currentDestination = location?.coordinates;
         _isLocationLoaded = true; // Location obtained
       });
-      mapController.move(location.coordinates, 16);
-    }
+      mapController.move(location!.coordinates, 16);
+    
 
     // Initialize continuous location updates.
     locationHandler.initializeLocation(
