@@ -6,7 +6,7 @@ class ArrowPainter extends CustomPainter {
 
   const ArrowPainter({
     this.color = Colors.blue,
-    this.size = 40.0,
+    this.size = 20.0,
   });
 
   @override

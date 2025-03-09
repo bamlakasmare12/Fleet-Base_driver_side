@@ -61,13 +61,19 @@ class _HomepageState extends State<Homepage> {
   taskFile.Task? acceptedTask;
   Timer? _deliveryTimer;
   double _bearing = 0.0;
+  List<LatLng> _warehouseRoute = [];
+  LatLng? warehousedestination;
+  bool _showWarehouseRoute = false;
   LatLng? _previousPosition;
   static const double _markerSize = 40.0;
   static const double _currentLocationSize = 40.0;
   static const Color _taskColor = Colors.blue;
   static const Color _warehouseColor = Colors.orange;
   bool _isLocationLoaded = false;
-
+  final distanceCalculator = Distance();
+  final Distance _distanceCalculator = Distance();
+  List<LatLng> _searchRoute = [];
+  LatLng? searchdestination;
   @override
   void initState() {
     super.initState();
@@ -102,7 +108,7 @@ class _HomepageState extends State<Homepage> {
   /// Initializes the app by getting the user ID, getting the current location once, and starting continuous location updates.
   /// It also loads the fetched tasks from the API into the bottom sheet and starts the delivery timer.
 
-   Future<void> _initializeApp() async {
+  Future<void> _initializeApp() async {
     // Get the user ID from the auth service.
     setState(() => _isLocationLoaded = true);
 
@@ -155,38 +161,44 @@ class _HomepageState extends State<Homepage> {
   }
 
   void startDeliveryTimer() {
-    _deliveryTimer = Timer.periodic(const Duration(seconds: 10), (timer) async {
+    _deliveryTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
       try {
         final fetchedTasks = await taskHandler.fetchDeliveries();
-        setState(() {
-          tasks = fetchedTasks;
-        });
+        // Use separate await for route calculation
+        List<LatLng> updatedRoute = _route;
 
-        // Check the status of each task and update _destination and acceptedTask if in transit
-        bool foundInTransit = false;
-        for (var task in fetchedTasks) {
-          if (task.status == "In Transit") {
-            // Assuming "In Transit" represents 'in transit'
-            setState(() async {
-              _destination = LatLng(task.destinationLatitude ?? 0.0,
-                  task.destinationLongitude ?? 0.0);
-              _route = await routeHandler.getRoute(
-                  current: _currentDestination!, destination: _destination!);
-              acceptedTask = task;
-            });
-            foundInTransit = true;
-            break; // Exit the loop once we find a task in transit
+        if (acceptedTask != null) {
+          final currentTask = fetchedTasks.firstWhere(
+            (t) => t.id == acceptedTask!.id,
+            orElse: () => acceptedTask!,
+          );
+
+          if (currentTask.destinationLatitude != _destination?.latitude ||
+              currentTask.destinationLongitude != _destination?.longitude) {
+            final newDestination = LatLng(
+              currentTask.destinationLatitude!,
+              currentTask.destinationLongitude!,
+            );
+            updatedRoute = await routeHandler.getRoute(
+              current: _currentDestination!,
+              destination: newDestination,
+            );
           }
         }
 
-        // If no task is in transit, clear the acceptedTask and route
-        if (!foundInTransit) {
-          setState(() {
-            acceptedTask = null;
-            _destination = null;
-            _route = [];
-          });
-        }
+        // Single setState call for all updates
+        setState(() {
+          tasks = fetchedTasks;
+          if (updatedRoute != _route) {
+            _route = updatedRoute;
+          }
+          if (acceptedTask != null && _destination == null) {
+            _destination = LatLng(
+              acceptedTask!.destinationLatitude!,
+              acceptedTask!.destinationLongitude!,
+            );
+          }
+        });
       } catch (e) {
         print('Background refresh error: $e');
       }
@@ -198,12 +210,9 @@ class _HomepageState extends State<Homepage> {
     setState(() => _isLoading = true);
     try {
       final fetchedTasks = await taskHandler.fetchDeliveries();
-      setState(() {
-        tasks = fetchedTasks;
-        _isLoading = false;
-      });
+      // Separate route calculation from state update
+      List<LatLng> newRoute = _route;
 
-      // Check the status of each task and update _destination and acceptedTask if in transit
       for (var task in fetchedTasks) {
         if (task.status == "In Transit") {
           // Assuming 2 represents 'in transit'
@@ -217,6 +226,13 @@ class _HomepageState extends State<Homepage> {
           break; // Exit the loop once we find a task in transit
         }
       }
+
+      // Single state update
+      setState(() {
+        tasks = fetchedTasks;
+        _route = newRoute;
+        _isLoading = false;
+      });
     } catch (e) {
       setState(() => _isLoading = false);
       print('Error fetching deliveries: $e');
@@ -233,26 +249,29 @@ class _HomepageState extends State<Homepage> {
           await routeHandler.fetchCoordinates(location);
       if (fetchedDestination != null) {
         setState(() {
-          _destination = fetchedDestination;
+          //_destination = fetchedDestination;
+          _searchRoute = [];
+          // Clear previous search route
         });
-        if (_currentDestination != null && _destination != null) {
+
+        if (_currentDestination != null) {
           List<LatLng> newRoute = await routeHandler.getRoute(
             current: _currentDestination!,
-            destination: _destination!,
+            destination: fetchedDestination,
           );
           setState(() {
-            _route = newRoute;
+            _searchRoute = newRoute;
+            searchdestination = fetchedDestination;
           });
-          mapController.move(_destination!, 14);
+          mapController.move(fetchedDestination, 14);
         }
       } else {
-        _showError('Location not found. Please try another search.');
+        _showError('Location not found');
       }
     } catch (e) {
       _showError(e.toString());
     }
   }
-
   // Modify _WareHouseCoordinates to simply move to the given location without drawing a route.
 
   // This function fetches warehouses for a task, extracts their coordinates,
@@ -274,7 +293,7 @@ class _HomepageState extends State<Homepage> {
         LatLng coordinate =
             LatLng(warehouses[i].latitude, warehouses[i].longitude);
         print("warehouse coordinate: $coordinate");
-
+        warehousedestination = coordinate;
         // Add the full warehouse object and its coordinate to their respective lists.
         _selectedWarehouses.add(warehouses[i]);
         _selectedWarehouseCoordinates.add(coordinate);
@@ -303,7 +322,6 @@ class _HomepageState extends State<Homepage> {
   }
 
   void finishTask() async {
-    final distanceCalculator = Distance();
     final distanceInMeters =
         distanceCalculator(_currentDestination!, _destination!);
 
@@ -554,6 +572,20 @@ class _HomepageState extends State<Homepage> {
                           'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                       userAgentPackageName: 'com.example.app',
                     ),
+                    if (_searchRoute.isNotEmpty)
+                      MarkerLayer(markers: [
+                        Marker(
+                          point: searchdestination!,
+                          width: 80,
+                          height: 80,
+                          child: IconButton(
+                            onPressed: () {},
+                            icon: const Icon(Icons.location_pin),
+                            color: Colors.blue,
+                            iconSize: 40,
+                          ),
+                        ),
+                      ]),
                     if (_destination != null)
                       MarkerLayer(markers: [
                         Marker(
@@ -568,58 +600,98 @@ class _HomepageState extends State<Homepage> {
                           ),
                         ),
                       ]),
-                    MarkerLayer(markers: [
-                      if (_route.isEmpty)
-                        Marker(
-                            point: _currentDestination!,
-                            width: 80,
-                            height: 80,
-                            child: Column(
-                              children: [
-                                Text(
-                                  "My Location",
-                                  style: TextStyle(
-                                    color: Colors.black,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    backgroundColor:
-                                        Colors.white.withOpacity(0.8),
-                                  ),
-                                ),
-                                const Icon(
-                                  Icons.location_pin,
-                                  color: Colors.red,
-                                  size: 40,
-                                ),
-                              ],
-                            )),
-                    ]),
                     MarkerLayer(
                       markers: [
-                        if (_currentDestination != null && _route.isNotEmpty)
+                        if (_currentDestination != null)
                           Marker(
                             point: _currentDestination!,
-                            width: 40,
-                            height: 40,
-                            child: Transform.rotate(
-                              angle: (_bearing * pi) / 180,
-                              child: CustomPaint(
-                                painter: ArrowPainter(
-                                  color: Colors.blue, // Customize color
-                                  size: 20.0, // Match marker dimensions
-                                ),
-                              ),
-                            ),
+                            width: 60,
+                            height: 60,
+                            child: _route.isNotEmpty ||
+                                    _warehouseRoute.isNotEmpty ||
+                                    _searchRoute.isNotEmpty
+                                ? Transform.rotate(
+                                    angle: (_bearing * pi) / 180,
+                                    child: CustomPaint(
+                                      painter: ArrowPainter(
+                                        color: Colors.blue,
+                                        size: 20.0,
+                                      ),
+                                    ),
+                                  )
+                                : Column(
+                                    children: [
+                                      Text(
+                                        "My Location",
+                                        style: TextStyle(
+                                          color: Colors.black,
+                                          fontSize:10,
+                                          fontWeight: FontWeight.bold,
+                                          backgroundColor:
+                                              Colors.white.withOpacity(0.8),
+                                        ),
+                                      ),
+                                      const Icon(
+                                        Icons.location_pin,
+                                        color: Colors.red,
+                                        size: 30,
+                                      ),
+                                    ],
+                                  ),
                           ),
                       ],
                     ),
+
+                    if (warehousedestination != null)
+                      MarkerLayer(markers: [
+                        Marker(
+                          point: warehousedestination!,
+                          width: 80,
+                          height: 80,
+                          child: IconButton(
+                            onPressed: () {},
+                            icon: const Icon(Icons.location_pin),
+                            color: Colors.blue,
+                            iconSize: 40,
+                          ),
+                        ),
+                      ]),
+                    MarkerLayer(
+                      markers: [
+                        if (_showWarehouseRoute && _warehouseRoute.isNotEmpty)
+                          Marker(
+                              point: _currentDestination!,
+                              width: 40,
+                              height: 40,
+                              child: Stack(
+                                children: [
+                                  IconButton(
+                                    onPressed: () {},
+                                    icon: const Icon(Icons.location_pin),
+                                    color: Colors.blue,
+                                    iconSize: 20,
+                                  ),
+                                  Transform.rotate(
+                                    angle: (_bearing * pi) / 180,
+                                    child: CustomPaint(
+                                      painter: ArrowPainter(
+                                        color: Colors.blue, // Customize color
+                                        size: 20.0, // Match marker dimensions
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              )),
+                      ],
+                    ),
+
                     // Added MarkerLayer for displaying multiple warehouse markers.
                     MarkerLayer(
                       markers: _selectedWarehouses
                           .map((warehouse) => Marker(
-                                point: LatLng(
+                                point: warehousedestination = LatLng(
                                     warehouse.latitude, warehouse.longitude),
-                                width: 80,
+                                width:80,
                                 height: 80,
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
@@ -647,11 +719,29 @@ class _HomepageState extends State<Homepage> {
 
                     PolylineLayer(
                       polylines: [
-                        Polyline(
-                          points: _route,
-                          color: Colors.green,
-                          strokeWidth: 4.0,
-                        ),
+                        // Show delivery route if exists
+                        if (_route.isNotEmpty)
+                          Polyline(
+                            points: _route,
+                            color: Colors.green,
+                            strokeWidth: 4.0,
+                          ),
+
+                        // Show warehouse route if exists
+                        if (_warehouseRoute.isNotEmpty)
+                          Polyline(
+                            points: _warehouseRoute,
+                            color: Colors.blue,
+                            strokeWidth: 4.0,
+                          ),
+
+                        // Show search route if exists
+                        if (_searchRoute.isNotEmpty)
+                          Polyline(
+                            points: _searchRoute,
+                            color: Colors.brown,
+                            strokeWidth: 4.0,
+                          ),
                       ],
                     ),
                   ],
@@ -677,14 +767,15 @@ class _HomepageState extends State<Homepage> {
               top: 80,
               right: 20,
               child: ElevatedButton(
-                onPressed: () {
+                onPressed: () async {
                   if (acceptedTask != null && _destination != null) {
-                    //  Directly use pre-cached destination
+                    // Recalculate route to ensure freshness
+
                     mapController.move(_destination!, 14);
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
-                        content: Text("No delivery is in route"),
+                        content: Text("No active delivery to route to"),
                         backgroundColor: Colors.red,
                       ),
                     );
@@ -814,51 +905,31 @@ class _HomepageState extends State<Homepage> {
           "Instruction: ${task.deliveryInstructions}\nStatus: ${task.status}\nLocation: ${task.destinationAddress} ",
           style: const TextStyle(fontSize: 16, color: Colors.black),
         ),
+
+        //warehouse tap handling
         onTap: () async {
-          print("task id: ${task.orderId} delivery id ${task.id} on tap");
           try {
             final fetchedWarehouses =
                 await taskHandler.fetchWarehouses(task.id);
-
-            setState(() {
-              _selectedWarehouses = fetchedWarehouses;
-            });
-
-            if (_selectedWarehouses.isNotEmpty) {
-              WidgetsBinding.instance.addPostFrameCallback((_) async {
-                if (_currentDestination == null) return;
-
-                // final warehousePoints = _selectedWarehouses
-                //     .map((w) => LatLng(w.latitude, w.longitude))
-                //     .toList();
-
-                // // Combine with current location for better context
-                // final allPoints = [...warehousePoints, _currentDestination!];
-
-                if (_selectedWarehouses.length == 1) {
-                  // Single warehouse: Set zoom level explicitly
-                  _destination = LatLng(_selectedWarehouses.first.latitude,
-                      _selectedWarehouses.first.longitude);
-                  List<LatLng> newRoute = await routeHandler.getRoute(
-                    current: _currentDestination!,
-                    destination: _destination!,
-                  );
-                  setState(() {
-                    _route = newRoute;
-                  });
-                  mapController.move(_destination!, 14);
-                }
-                // } else {
-                //   // Multiple warehouses: Fit to bounds
-                //   final bounds = LatLngBounds.fromPoints(allPoints);
-                //   mapController.fitCamera(
-                //     CameraFit.bounds(
-                //       bounds: bounds,
-                //       padding: const EdgeInsets.all(100),
-                //     ),
-                //   );
-                // }
+            if (fetchedWarehouses.isNotEmpty) {
+              var warehouse = fetchedWarehouses.first;
+              setState(() {
+                _selectedWarehouses = [warehouse];
+                warehousedestination =
+                    LatLng(warehouse.latitude, warehouse.longitude);
+                //_route.clear();
               });
+
+              if (_currentDestination != null) {
+                List<LatLng> newRoute = await routeHandler.getRoute(
+                  current: _currentDestination!,
+                  destination: warehousedestination!,
+                );
+                setState(() {
+                  _warehouseRoute = newRoute;
+                });
+                mapController.move(warehousedestination!, 14);
+              }
             }
           } catch (e) {
             print('Error handling warehouse tap: $e');
@@ -912,60 +983,72 @@ class _HomepageState extends State<Homepage> {
                   backgroundColor:
                       (acceptedTask != null && acceptedTask!.id == task.id)
                           ? Colors.green
-                          : null,
+                          : Colors.white,
                 ),
                 onPressed: () async {
-                  if (acceptedTask == null) {
-                    setState(() {
-                      acceptedTask = taskHandler.acceptedTask = task;
-                      taskHandler.updateDeliveryStatus(task.id);
-                      // 🔥 Directly set destination from task coordinates
-                      _destination = LatLng(
-                        task.destinationLatitude ?? 0.0,
-                        task.destinationLongitude ?? 0.0,
-                      );
-                    });
+                  try {
+                    // if (task.status != "Packed" && task.status != "Delayed"&& task) {
+                    //   _showError("This task cannot be accepted");
+                    //   return;
+                    // }
 
-                    // Generate route after setting destination
-                    if (_currentDestination != null && _destination != null) {
-                      List<LatLng> newRoute = await routeHandler.getRoute(
-                        current: _currentDestination!,
-                        destination: _destination!,
+                    // Warehouse proximity check for Packed tasks
+                    if (task.status == "Packed") {
+                      final warehouses =
+                          await taskHandler.fetchWarehouses(task.id);
+                      if (warehouses.isEmpty)
+                        throw Exception("No warehouse found");
+
+                      final warehouse = warehouses.first;
+                      final warehouseCoords =
+                          LatLng(warehouse.latitude, warehouse.longitude);
+
+                      final distance = _distanceCalculator.as(
+                        LengthUnit.Meter,
+                        _currentDestination!,
+                        warehouseCoords,
                       );
-                      setState(() {
-                        _route = newRoute;
-                      });
-                      mapController.move(_destination!, 14); // Recenter map
+
+                      if (distance > 50) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content:
+                                Text("Must be within 50m of ${warehouse.name}"),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
                     }
 
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text("Task '${task.id}' accepted."),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-                  } else if (acceptedTask!.id == task.id) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text("Task '${task.id}' is already accepted."),
-                        backgroundColor: Colors.orange,
-                      ),
-                    );
-                  } else {
-                    showDialog(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text("Task Already Accepted"),
-                        content: const Text(
-                            "You must finish your current task before accepting another."),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text("OK"),
-                          ),
-                        ],
-                      ),
-                    );
+                    if (acceptedTask == null) {
+                      // Update backend first
+                      await taskHandler.updateDeliveryStatus(task.id);
+                      final newRoute = await routeHandler.getRoute(
+                        current: _currentDestination!,
+                        destination: LatLng(
+                          task.destinationLatitude!,
+                          task.destinationLongitude!,
+                        ),
+                      );
+
+                      // Single state update
+                      setState(() {
+                        acceptedTask = task;
+                        _destination = LatLng(
+                          task.destinationLatitude!,
+                          task.destinationLongitude!,
+                        );
+                        _route = newRoute;
+                        _warehouseRoute.clear();
+                        _searchRoute.clear();
+                      });
+
+                      //   await loadDeliveries(); // Refresh task list
+                      mapController.move(_destination!, 14);
+                    }
+                  } catch (e) {
+                    _showError("Accept failed: ${e.toString()}");
                   }
                 },
                 child: Text(
