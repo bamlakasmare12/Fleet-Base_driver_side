@@ -101,56 +101,55 @@ class _HomepageState extends State<Homepage> {
   /// It also loads the fetched tasks from the API into the bottom sheet and starts the delivery timer.
 
   Future<void> _initializeApp() async {
-    // Get the user ID from the auth service.
-    setState(() => _isLocationLoaded = true);
+  setState(() => _isLocationLoaded = true);
 
-    // Get the current location once and move the map.
-    final location = await locationHandler.getCurrentLocation();
-
-    setState(() {
-      _currentDestination = location?.coordinates;
-      _isLocationLoaded = true; // Location obtained
-    });
-    mapController.move(location!.coordinates, 16);
-
-    // Initialize continuous location updates.
-    // In _initializeApp()
-    locationHandler.initializeLocation(
-      onLocationUpdate: (LatLng newLocation) {
-        final locationData = LocationData.fromMap({
-          'latitude': newLocation.latitude,
-          'longitude': newLocation.longitude,
-        });
-        _handleLocationUpdate(locationData);
-      },
-      mapController: mapController,
-    );
-
-    // Start a timer to update the current location every 3 seconds.
-    Timer.periodic(const Duration(seconds: 3), (timer) async {
-      final location = await locationHandler.getCurrentLocation();
-      if (location != null) {
-        setState(() {
-          _currentDestination = location.coordinates;
-        });
-        mapController.move(location.coordinates, 16);
-
-        // Update the backend with the new location if there is an active task.
-        if (acceptedTask != null) {
-          int delId = acceptedTask!.id;
-          int del_stat_id = await taskHandler.getdeliveryStatusId(delId);
-          print('gps id: ${del_stat_id}');
-          await gpsUpdateService.updateLocation(del_stat_id);
-        }
-      }
-    });
-
-    // Load fetched tasks from API into the bottom sheet.
-    if (!_isLoading) {
-      await loadDeliveries();
-    }
-    startDeliveryTimer();
+  final location = await locationHandler.getCurrentLocation();
+  setState(() {
+    _currentDestination = location?.coordinates;
+    _isLocationLoaded = true;
+  });
+  if (location != null) {
+    mapController.move(location.coordinates, 16);
   }
+
+  locationHandler.initializeLocation(
+    onLocationUpdate: (LatLng newLocation) {
+      final locationData = LocationData.fromMap({
+        'latitude': newLocation.latitude,
+        'longitude': newLocation.longitude,
+      });
+      _handleLocationUpdate(locationData);
+    },
+    mapController: mapController,
+  );
+
+  Timer.periodic(const Duration(seconds: 3), (timer) async {
+    final location = await locationHandler.getCurrentLocation();
+    if (location != null) {
+      final newCoords = location.coordinates;
+      bool isSameLocation = _currentDestination != null &&
+          newCoords.latitude == _currentDestination!.latitude &&
+          newCoords.longitude == _currentDestination!.longitude;
+
+      if (!isSameLocation) {
+        setState(() => _currentDestination = newCoords);
+        mapController.move(newCoords, 16);
+      }
+
+      if (acceptedTask != null && !isSameLocation) {
+        int delId = acceptedTask!.id;
+        int del_stat_id = await taskHandler.getdeliveryStatusId(delId);
+        print('gps id: ${del_stat_id}');
+        await gpsUpdateService.updateLocation(del_stat_id);
+      }
+    }
+  });
+
+  if (!_isLoading) {
+    await loadDeliveries();
+  }
+  startDeliveryTimer();
+}
 
   void startDeliveryTimer() {
     _deliveryTimer = Timer.periodic(const Duration(seconds: 10), (timer) async {
