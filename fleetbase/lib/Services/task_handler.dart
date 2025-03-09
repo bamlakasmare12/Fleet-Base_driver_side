@@ -47,16 +47,19 @@ class TaskHandler {
     }
   }
   Future<void> finishTask({
-    required LatLng? currentLocation,
-    required LatLng? destination,
+required int? id,
     required String? imageUrl,
     required Function onFinished,
     required Function(String) onError,
   }) async {
+   
+   
+    
+
  
     try {
       final String baseUrl = "https://supply-y47s.onrender.com";
-      final endpoint = "/delivery/delivery_delivered?delivery_id=${acceptedTask!.id}";
+      final endpoint = "/delivery/delivery_delivered?delivery_id=${id}";
       final uri = Uri.parse('$baseUrl$endpoint');
 
       final response = await http.post(

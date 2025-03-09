@@ -350,8 +350,7 @@ class _HomepageState extends State<Homepage> {
 
         // Step 3: Complete the task with image URL
         taskHandler.finishTask(
-          currentLocation: _currentDestination,
-          destination: _destination,
+          id:acceptedTask!.id,
           imageUrl: imageUrl, // Add this parameter to your finishTask method
           onFinished: () {
             setState(() {
