@@ -93,7 +93,9 @@ class _HomepageState extends State<Homepage> {
 
     if (acceptedTask != null) {
       mapController.move(newPosition, mapController.camera.zoom);
-      gpsUpdateService.updateLocation(acceptedTask!.id);
+      int delId = acceptedTask!.id;
+        int del_stat_id =  taskHandler.getdeliveryStatusId(delId) as int;
+      gpsUpdateService.updateLocation(del_stat_id);
     }
   }
 

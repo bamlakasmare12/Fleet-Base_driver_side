@@ -5,10 +5,11 @@ import '../Model/gps_model.dart';
 import '../Services/Location_manager.dart';
 
 class GpsUpdateService {
-  final String _url = 'https://supply-y47s.onrender.com/delivery/add_gps';
   final AuthService _authService = AuthService();
 
   Future<void> updateLocation(int deliveryStatusId) async {
+      final String _url = 'https://supply-y47s.onrender.com/delivery/add_gps';
+
     final location = await LocationHandler().getCurrentLocation();
     
     if (location == null) {
