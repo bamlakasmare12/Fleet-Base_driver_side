@@ -94,7 +94,7 @@ class _HomepageState extends State<Homepage> {
     if (acceptedTask != null) {
       mapController.move(newPosition, mapController.camera.zoom);
       int delId = acceptedTask!.id;
-        int del_stat_id =  taskHandler.getdeliveryStatusId(delId) as int;
+      int del_stat_id = taskHandler.getdeliveryStatusId(delId) as int;
       gpsUpdateService.updateLocation(del_stat_id);
     }
   }
@@ -102,56 +102,57 @@ class _HomepageState extends State<Homepage> {
   /// Initializes the app by getting the user ID, getting the current location once, and starting continuous location updates.
   /// It also loads the fetched tasks from the API into the bottom sheet and starts the delivery timer.
 
-  Future<void> _initializeApp() async {
-  setState(() => _isLocationLoaded = true);
+   Future<void> _initializeApp() async {
+    // Get the user ID from the auth service.
+    setState(() => _isLocationLoaded = true);
 
-  final location = await locationHandler.getCurrentLocation();
-  setState(() {
-    _currentDestination = location?.coordinates;
-    _isLocationLoaded = true;
-  });
-  if (location != null) {
-    mapController.move(location.coordinates, 16);
-  }
-
-  locationHandler.initializeLocation(
-    onLocationUpdate: (LatLng newLocation) {
-      final locationData = LocationData.fromMap({
-        'latitude': newLocation.latitude,
-        'longitude': newLocation.longitude,
-      });
-      _handleLocationUpdate(locationData);
-    },
-    mapController: mapController,
-  );
-
-  Timer.periodic(const Duration(seconds: 3), (timer) async {
+    // Get the current location once and move the map.
     final location = await locationHandler.getCurrentLocation();
-    if (location != null) {
-      final newCoords = location.coordinates;
-      bool isSameLocation = _currentDestination != null &&
-          newCoords.latitude == _currentDestination!.latitude &&
-          newCoords.longitude == _currentDestination!.longitude;
 
-      if (!isSameLocation) {
-        setState(() => _currentDestination = newCoords);
-        mapController.move(newCoords, 16);
-      }
+    setState(() {
+      _currentDestination = location?.coordinates;
+      _isLocationLoaded = true; // Location obtained
+    });
+    mapController.move(location!.coordinates, 16);
 
-      if (acceptedTask != null ) {
-        int delId = acceptedTask!.id;
-        int del_stat_id = await taskHandler.getdeliveryStatusId(delId);
-        print('gps id: ${del_stat_id}');
-        await gpsUpdateService.updateLocation(del_stat_id);
+    // Initialize continuous location updates.
+    // In _initializeApp()
+    locationHandler.initializeLocation(
+      onLocationUpdate: (LatLng newLocation) {
+        final locationData = LocationData.fromMap({
+          'latitude': newLocation.latitude,
+          'longitude': newLocation.longitude,
+        });
+        _handleLocationUpdate(locationData);
+      },
+      mapController: mapController,
+    );
+
+    // Start a timer to update the current location every 3 seconds.
+    Timer.periodic(const Duration(seconds: 3), (timer) async {
+      final location = await locationHandler.getCurrentLocation();
+      if (location != null) {
+        setState(() {
+          _currentDestination = location.coordinates;
+        });
+        mapController.move(location.coordinates, 16);
+
+        // Update the backend with the new location if there is an active task.
+        if (acceptedTask != null) {
+          int delId = acceptedTask!.id;
+          int del_stat_id = await taskHandler.getdeliveryStatusId(delId);
+          print('gps id: ${del_stat_id}');
+          await gpsUpdateService.updateLocation(del_stat_id);
+        }
       }
+    });
+
+    // Load fetched tasks from API into the bottom sheet.
+    if (!_isLoading) {
+      await loadDeliveries();
     }
-  });
-
-  if (!_isLoading) {
-    await loadDeliveries();
+    startDeliveryTimer();
   }
-  startDeliveryTimer();
-}
 
   void startDeliveryTimer() {
     _deliveryTimer = Timer.periodic(const Duration(seconds: 10), (timer) async {
@@ -827,29 +828,36 @@ class _HomepageState extends State<Homepage> {
               WidgetsBinding.instance.addPostFrameCallback((_) async {
                 if (_currentDestination == null) return;
 
-                final warehousePoints = _selectedWarehouses
-                    .map((w) => LatLng(w.latitude, w.longitude))
-                    .toList();
+                // final warehousePoints = _selectedWarehouses
+                //     .map((w) => LatLng(w.latitude, w.longitude))
+                //     .toList();
 
-                // Combine with current location for better context
-                final allPoints = [...warehousePoints, _currentDestination!];
+                // // Combine with current location for better context
+                // final allPoints = [...warehousePoints, _currentDestination!];
 
                 if (_selectedWarehouses.length == 1) {
                   // Single warehouse: Set zoom level explicitly
-                  mapController.move(
-                    warehousePoints.first,
-                    14, // Optimal zoom level for single location
+                  _destination = LatLng(_selectedWarehouses.first.latitude,
+                      _selectedWarehouses.first.longitude);
+                  List<LatLng> newRoute = await routeHandler.getRoute(
+                    current: _currentDestination!,
+                    destination: _destination!,
                   );
-                } else {
-                  // Multiple warehouses: Fit to bounds
-                  final bounds = LatLngBounds.fromPoints(allPoints);
-                  mapController.fitCamera(
-                    CameraFit.bounds(
-                      bounds: bounds,
-                      padding: const EdgeInsets.all(100),
-                    ),
-                  );
+                  setState(() {
+                    _route = newRoute;
+                  });
+                  mapController.move(_destination!, 14);
                 }
+                // } else {
+                //   // Multiple warehouses: Fit to bounds
+                //   final bounds = LatLngBounds.fromPoints(allPoints);
+                //   mapController.fitCamera(
+                //     CameraFit.bounds(
+                //       bounds: bounds,
+                //       padding: const EdgeInsets.all(100),
+                //     ),
+                //   );
+                // }
               });
             }
           } catch (e) {
