@@ -794,7 +794,9 @@ class _HomepageState extends State<Homepage> {
               top: 140,
               right: 20,
               child: ElevatedButton(
-                onPressed: finishTask,
+                onPressed: () async{
+                 finishTask();
+                },
                 style: ElevatedButton.styleFrom(
                   shape: const CircleBorder(),
                   padding: const EdgeInsets.all(16),

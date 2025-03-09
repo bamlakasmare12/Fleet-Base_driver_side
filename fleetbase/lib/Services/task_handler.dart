@@ -53,16 +53,6 @@ class TaskHandler {
     required Function onFinished,
     required Function(String) onError,
   }) async {
-    if (acceptedTask == null) {
-      onError("No task has been accepted.");
-      return;
-    }
-    
-    if (currentLocation == null || destination == null) {
-      onError("Invalid location data");
-      return;
-    }
-
  
     try {
       final String baseUrl = "https://supply-y47s.onrender.com";
