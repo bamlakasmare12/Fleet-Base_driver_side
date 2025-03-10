@@ -50,7 +50,7 @@ class _HomepageState extends State<Homepage> {
   List<taskFile.Task> tasks = <taskFile.Task>[];
   List<taskmodel.TaskModel> tasked = <taskmodel.TaskModel>[];
   List<taskmodel.TaskModel> _selectedWarehouses = [];
-  LatLng? _currentDestination = LatLng(0, 0);
+  LatLng? _currentDestination = LatLng(0.0, 0.0);
   LatLng? _destination;
   List<LatLng> _selectedWarehouseCoordinates = [];
   List<String> warehousenames = [];
@@ -167,31 +167,41 @@ class _HomepageState extends State<Homepage> {
         // Use separate await for route calculation
         List<LatLng> updatedRoute = _route;
 
-        if (acceptedTask != null) {
-          final currentTask = fetchedTasks.firstWhere(
-            (t) => t.id == acceptedTask!.id,
-            orElse: () => acceptedTask!,
-          );
-
-          if (currentTask.destinationLatitude != _destination?.latitude ||
-              currentTask.destinationLongitude != _destination?.longitude) {
+        for (var task in fetchedTasks) {
+          if (task.status == "In Transit") {
+            // Assuming "In Transit" represents the task in transit
             final newDestination = LatLng(
-              currentTask.destinationLatitude!,
-              currentTask.destinationLongitude!,
+              task.destinationLatitude ?? 0.0,
+              task.destinationLongitude ?? 0.0,
             );
+
+            // Calculate the new route
             updatedRoute = await routeHandler.getRoute(
               current: _currentDestination!,
               destination: newDestination,
             );
+
+            // Update the state with the new task and route
+            setState(() {
+              _destination = newDestination;
+              acceptedTask = task;
+              _route = updatedRoute;
+            });
+
+            break; // Exit the loop once we find a task in transit
+          } else {
+            // If the task is not in transit, clear the route
+            setState(() {
+              _route = [];
+              acceptedTask = null;
+              _destination = null;
+            });
           }
         }
 
         // Single setState call for all updates
         setState(() {
           tasks = fetchedTasks;
-          if (updatedRoute != _route) {
-            _route = updatedRoute;
-          }
           if (acceptedTask != null && _destination == null) {
             _destination = LatLng(
               acceptedTask!.destinationLatitude!,
@@ -249,7 +259,6 @@ class _HomepageState extends State<Homepage> {
           await routeHandler.fetchCoordinates(location);
       if (fetchedDestination != null) {
         setState(() {
-          //_destination = fetchedDestination;
           _searchRoute = [];
           // Clear previous search route
         });
@@ -350,7 +359,7 @@ class _HomepageState extends State<Homepage> {
 
         // Step 3: Complete the task with image URL
         taskHandler.finishTask(
-          id:acceptedTask!.id,
+          id: acceptedTask!.id,
           imageUrl: imageUrl, // Add this parameter to your finishTask method
           onFinished: () {
             setState(() {
@@ -547,7 +556,7 @@ class _HomepageState extends State<Homepage> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (_isLocationLoaded) // Only build map when location is ready
+            //if (_isLocationLoaded) // Only build map when location is ready
 
               Container(
                 width: screenwidth,
@@ -624,7 +633,7 @@ class _HomepageState extends State<Homepage> {
                                         "My Location",
                                         style: TextStyle(
                                           color: Colors.black,
-                                          fontSize:10,
+                                          fontSize: 10,
                                           fontWeight: FontWeight.bold,
                                           backgroundColor:
                                               Colors.white.withOpacity(0.8),
@@ -690,7 +699,7 @@ class _HomepageState extends State<Homepage> {
                           .map((warehouse) => Marker(
                                 point: warehousedestination = LatLng(
                                     warehouse.latitude, warehouse.longitude),
-                                width:80,
+                                width: 80,
                                 height: 80,
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
@@ -793,8 +802,8 @@ class _HomepageState extends State<Homepage> {
               top: 140,
               right: 20,
               child: ElevatedButton(
-                onPressed: () async{
-                 finishTask();
+                onPressed: () async {
+                  finishTask();
                 },
                 style: ElevatedButton.styleFrom(
                   shape: const CircleBorder(),
@@ -903,12 +912,13 @@ class _HomepageState extends State<Homepage> {
               fontSize: 18, color: Colors.black, fontWeight: FontWeight.bold),
         ),
         subtitle: Text(
-          "Instruction: ${task.deliveryInstructions}\nStatus: ${task.status}\nLocation: ${task.destinationAddress} ",
+          "Instruction: ${task.deliveryInstructions}\nStatus: ${task.status} \ntap to route warehouse\nLocation: ${task.destinationAddress} ",
           style: const TextStyle(fontSize: 16, color: Colors.black),
         ),
 
         //warehouse tap handling
         onTap: () async {
+          print("task id: ${task.id}");
           try {
             final fetchedWarehouses =
                 await taskHandler.fetchWarehouses(task.id);
