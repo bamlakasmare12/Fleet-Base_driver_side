@@ -77,23 +77,16 @@ class _HomepageState extends State<Homepage> {
  @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this as WidgetsBindingObserver);
     _initializeApp();
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this as WidgetsBindingObserver);
     _deliveryTimer?.cancel();
     super.dispose();
   }
 
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      // App has resumed, reinitialize the app
-      _initializeApp();
-    }
-  }
+  
   void _handleLocationUpdate(LocationData newLocation) {
     final newPosition = LatLng(newLocation.latitude!, newLocation.longitude!);
 
