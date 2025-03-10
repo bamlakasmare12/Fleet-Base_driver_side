@@ -74,12 +74,27 @@ class _HomepageState extends State<Homepage> {
   final Distance _distanceCalculator = Distance();
   List<LatLng> _searchRoute = [];
   LatLng? searchdestination;
-  @override
+ @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this as WidgetsBindingObserver);
     _initializeApp();
   }
 
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this as WidgetsBindingObserver);
+    _deliveryTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // App has resumed, reinitialize the app
+      _initializeApp();
+    }
+  }
   void _handleLocationUpdate(LocationData newLocation) {
     final newPosition = LatLng(newLocation.latitude!, newLocation.longitude!);
 
