@@ -88,7 +88,6 @@ class _HomepageState extends State<Homepage> {
     super.dispose();
   }
 
-  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       // App has resumed, reinitialize the app
